@@ -57,8 +57,6 @@ end
         if !isready(work_chl) && (fut_work == nothing || isready(fut_worK))
             # signal that this worker is idle
             remotecall(signal_idle, 1, my_id())
-            # wait until an item arrives
-            wait(work_chl)
         end
         
         # take that item
@@ -88,6 +86,7 @@ end
             else
                 # no idle nodes, so compute our work
                 wait(fut_work)
+                fut_work = @spawnat myid() compute(item)
             end
         end
     end
