@@ -1,3 +1,6 @@
+# Spawn a number of workers that are marked as nonidle
+# The controller waits for all workers to signal that 
+# they are idle, then terminates.
 
 # set up
 np = 3
@@ -16,7 +19,7 @@ const trm_chl = Channel(1)
     else
         is_idle[id] = true
     end
-    # is_idle[id] = true
+    
     if all(is_idle)
         # signal to controller to terminate
         put!(trm_chl, true)
@@ -30,7 +33,7 @@ end
     # wait a random amount of time
     sleep(rand(1:5))
     # signal idle
-    remote_do(signal_idle, 1, myid())
+    @async remote_do(signal_idle, 1, myid())
 end
 
 # spawn the workers
