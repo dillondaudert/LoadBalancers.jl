@@ -1,4 +1,5 @@
-# Signal idle to controller using a dedicated task and a remote channel# Spawn a number of workers that are marked as nonidle
+# Signal idle to controller using a dedicated task and a remote channel
+# Spawn a number of workers that are marked as nonidle
 # The controller waits for all workers to signal that 
 # they are idle, then terminates.
 
