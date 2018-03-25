@@ -15,64 +15,44 @@
 np = 3
 addprocs(np)
 
-# only worker 1 is non-idle to begin
 const is_idle = ones(Bool, nworkers())
+is_idle[1] = false
 
 # create remote channels on all processes
 const work_chls = [RemoteChannel(()->Channel(64), id) for id in workers()]
+# channel for passing status updates
+const stat_chl = RemoteChannel(()->Channel(64), 1)
 # create a dedicated remote channel for results
 const res_chl = RemoteChannel(()->Channel(64), 1)
 
-# Signalling Functions
-@everywhere function signal_idle(id)
-    """
-    Signal to the controller that the calling worker is idle.
-    Set the status of the caller to idle.
-    
-    NOTE: This is called from workers, but should only ever run
-    on the controller process.
-    """
-    if nworkers() > 1
-        is_idle[id-1] = true
-    else
-        is_idle[id] = true
-    end
-    @printf("SIG: Worker %d signalling idle...", id)
-    @printf("Idle status: %s\n", string(is_idle))
-end
 
-@everywhere function signal_nonidle(id)
+@everywhere function get_idle(id)
     """
-    Signal to the controller that the calling worker is non-idle.
-    Set the status of the caller to non-idle, then return the id
-    of an idle worker, or nothing if all workers are non-idle.
+    Get the id of an idle process.
     
     NOTE: This is called from workers, but should only ever run
     on the controller process.
     """
-    @printf("SIG: Worker %d signalling non-idle, ", id)
-    if nworkers() > 1
-        is_idle[id-1] = false
-    else
-        is_idle[id] = false
+
+    # if no idle workers, return nothing
+    if all(.!is_idle)
+        return nothing
     end
-    
-    for pid in workers()
-        
-        p_idx = nworkers() > 1 ? pid-1 : pid
-        
-        if is_idle[p_idx]
-            @printf("returning idle worker %d\n", pid)
-            is_idle[p_idx] = false
-            return pid
-        end
-    end
-    @printf("no idle worker.\n")
-    return nothing
+
+    # get the indices of idle workers
+    idle_idxs = filter(x->is_idle[x], 1:nworkers())
+
+    # randomly select the index of one idle worker
+    p_idx = rand(idle_idxs)
+
+    # pass the worker id back to caller
+    #put!(stat_chl, (workers()[p_idx], :nonidle))
+    return workers()[p_idx]
+
 end
 
 # WORKER
-@everywhere function worker(work_chls, res_chl)
+@everywhere function worker(work_chls, res_chl, stat_chl)
     """
     A worker task. This task acts as a manager that launches sub-tasks
     for the various functions of a worker, including 
@@ -86,18 +66,51 @@ end
     
     work_chl = work_chls[p_idx]
     
-    local_work_chl = Channel(5)
+    local_work_chl = Channel(1)
     
     nonidle_cond = Condition()
     
     @sync begin
+        # SUBTASK: route incoming messages
+        @async begin
+            while true
+                # block until item is available
+                item = fetch(work_chl)
 
+                if item == :finish
+                    # propagate finish signal
+                    put!(local_work_chl, :finish)
+                    break
+                elseif item == :nowork
+                    # remove the message and signal idle
+                    take!(work_chl)
+                    #put!(stat_chl, (myid(), :idle))
+                    continue
+                else
+                    # remove an item of work
+                    work = take!(work_chl)
+                    # if we have extra work
+                    if isready(work_chl)
+                        # notify the task that we are nonidle
+                        notify(nonidle_cond)
+                    end
+                    @printf("Doing %g seconds of work.\n", work)
+                    put!(local_work_chl, work)
+                end
+            end
+        end
         # SUBTASK: Pull work off work_chl, compute, push to result channel
-        @schedule begin
+        @async begin
             while true
                 work = take!(local_work_chl)
+                if work == :finish
+                    break
+                end
                 sleep(work)
                 put!(res_chl, (work, myid()))
+                if !isready(local_work_chl)
+                    put!(stat_chl, (myid(), :idle))
+                end
             end
         end
         
@@ -105,97 +118,92 @@ end
         @schedule begin
             while true
                 wait(nonidle_cond)
-                pid = remotecall_fetch(signal_nonidle, 1, myid())
+                # signal that we are not idle
+                put!(stat_chl, (myid(), :nonidle))
+                pid = remotecall_fetch(get_idle, 1, myid())
                 if pid != nothing
                     # there is an idle node
                     p_idx = nworkers() > 1 ? pid - 1 : pid
                     other_work_chl = work_chls[p_idx]
-                    if isready(local_work_chl)
+                    if isready(work_chl)
                         # there is work to distribute
-                        work = take!(local_work_chl)
-                        @printf("|>> Worker %d moving work to worker %d\n", myid(), pid)
+                        work = take!(work_chl)
+                        @printf("|>> Moving work to worker %d\n", pid)
                         put!(other_work_chl, work)
                     else
                         # the local worker already took this work
-                        @printf("|>> Worker %d telling worker %d no work available\n", myid(), pid)
+                        @printf("|>> No work to move to worker %d\n", pid)
                         put!(other_work_chl, :nowork)                    
                     end
                 else
                     # there are no idle nodes, sleep to prevent
                     # spam nonidle messages
-                    sleep(3)
+                    sleep(1)
                 end
             end
         end
 
-        # SUBTASK: monitor idle status, notify other subtasks
-        @async begin
-            while true
-                remotecall(signal_idle, 1, myid())
-                # block until item is available
-                item = fetch(work_chl)
+    end
+end
 
-                if item == :finish
-                    # close local channels and break
-                    close(local_work_chl)
-                    break
-                elseif item == :nowork
-                    # remove the message and signal idle
-                    take!(work_chl)
-                    remotecall(signal_idle, 1, myid())
-                    continue
-                else
-                    # remove an item of work
-                    work = take!(work_chl)
-                    put!(local_work_chl, work)
-                    # notify the task that we are nonidle
-                    notify(nonidle_cond)
-                end
-            end
+function status_manager()
+    while any(.!is_idle)
+        status = take!(stat_chl)
+        pid = status[1]
+        message = status[2]
+        p_idx = nworkers() > 1 ? pid - 1 : pid
+
+        if message == :idle
+            @printf("~| Worker %d is idle.\n", pid)
+            is_idle[p_idx] = true
+        elseif message == :nonidle
+            @printf("~| Worker %d is nonidle.\n", pid)
+            is_idle[p_idx] = false
         end
     end
-    @printf("Worker %d finished.", myid())
-    # exit worker 
 end
 
 @printf("Controller starting.\n")
+n = 20
+max_work = 10
+is_idle[1] = false
+exec_time = zeros(Int, nworkers())
 @sync begin
     # controller
     @sync begin
-        n = 10
-        is_idle[1] = false
 
         @async begin
             for i in 1:n
                 @printf("|> Sending initial work unit %d to worker %d.\n", i, workers()[1])
-                put!(work_chls[1], rand(1:6))
+                put!(work_chls[1], rand(1:max_work))
             end
-        end
-
-        @async begin
-            while any(.!is_idle)
-                sleep(1)
-            end
-            @printf("All workers idle!\n")
         end
 
         for pid in workers()
             @printf("Starting worker on process %d.\n", pid)
-            @async remote_do(worker, pid, work_chls, res_chl)
+            @async remote_do(worker, pid, work_chls, res_chl, stat_chl)
         end
 
         @schedule begin
             for i in 1:n
                 result = take!(res_chl)
-                @printf("Printing result: %g seconds on worker %d.\n", result[1], result[2])
+                p_idx = nworkers() > 1 ? result[2] - 1 : result[2]
+                exec_time[p_idx] += result[1]
             end
         end
     end
 
+    @async status_manager()
+
+end
+
+@sync begin
     @printf("SIG: Signalling to workers to finish.\n")
     for chl in work_chls
         @async put!(chl, :finish)
     end
 end
-
 print("Controller terminating.\n")
+for i in 1:nworkers()
+    @printf("Worker %d spent %g seconds doing work.\n", workers()[i], exec_time[i])
+end
