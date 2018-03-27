@@ -11,18 +11,9 @@
 
 # ------------------------------------------------------------
 
-# create workers processes
 np = 3
+# create workers processes
 addprocs(np)
-
-const statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
-
-# create remote channels on all processes
-const work_chls = [RemoteChannel(()->Channel(64), id) for id in workers()]
-# channel for passing status updates
-const stat_chl = RemoteChannel(()->Channel(64), 1)
-# create a dedicated remote channel for results
-const res_chl = RemoteChannel(()->Channel(64), 1)
 
 @everywhere mutable struct WorkerState
     started::Bool
@@ -35,16 +26,93 @@ end
     content::Int
 end
 
-@everywhere function do_work(work::Message, res_chl)
+# create remote channels with global references on all workers
+const work_chls = [RemoteChannel(()->Channel(64), id) for id in workers()]
+# channel for passing status updates
+const stat_chl = RemoteChannel(()->Channel(64), 1)
+# create a dedicated remote channel for results
+const res_chl = RemoteChannel(()->Channel(64), 1)
+
+const statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
+
+function controller()
+    
+    @printf("Controller starting.\n")
+    
+
+    n = 5
+    max_work = 5
+    statuses[1] = :started
+    exec_time = zeros(Int, nworkers())
+    @sync begin
+        # controller
+        @async begin
+            for i in 1:n
+                @printf("|> Sending initial work unit %d to worker %d.\n", i, workers()[1])
+                put!(work_chls[1], Message(:work, rand(1:max_work)))
+            end
+        end
+
+        for pid in workers()
+            @printf("Starting worker on process %d.\n", pid)
+            @async remote_do(worker, pid, work_chls, stat_chl, res_chl)
+        end
+
+        @schedule begin
+            for i in 1:n
+                result = take!(res_chl)
+                p_idx = nworkers() > 1 ? result[1] - 1 : result[1]
+                exec_time[p_idx] += result[2]
+            end
+        end
+
+        @async status_manager()
+
+    end
+
+    @sync begin
+        @printf("SIG: Signalling to workers to finish.\n")
+        for chl in work_chls
+            @async put!(chl, Message(:finish, -1))
+        end
+    end
+    print("Controller terminating.\n")
+    for i in 1:nworkers()
+        @printf("Worker %d spent %g seconds doing work.\n", workers()[i], exec_time[i])
+    end
+
+end
+
+@everywhere function worker_subtask()
+    # when we start, don't signal; just wait for work
+    while true
+        wait(_local_work_chl)
+        while isready(_local_work_chl)
+            work_message = take!(_local_work_chl)
+            if work_message.name == :finish
+                return
+            end
+            @assert work_message.name == :work
+            sleep(work_message.content)
+            put!(res_chl, (myid(), work_message.content))
+        end
+        # there is no more work in the local channel, signal to self
+        put!(msg_chl, Message(:idle, -1))
+    end
+end
+
+@everywhere function do_work(work_message::Message, res_chl)
+    @printf("Doing work: %s\n", string(work_message))
+    if work_message.name != :work
+        @printf("NON-WORK MESSAGE IN DO_WORK ON WORKER %d.\n", myid())
+    end
     # simulate doing work
-    @assert work.name == :work
-    @assert work.content > 0
-    sleep(work.content)
-    put!(res_chl, (myid(), work.content))
+    sleep(work_message.content)
+    put!(res_chl, (myid(), work_message.content))
 end
 
 # WORKER
-@everywhere function worker(work_chls, res_chl, stat_chl)
+@everywhere function worker(work_chls, stat_chl, res_chl)
     """
     A worker task. This task acts as a manager that launches sub-tasks
     for the various functions of a worker, including 
@@ -62,7 +130,12 @@ end
     
     while true
         # NEW --
+        if state.started && (isnull(state.worker) || get(state.worker).state == :done)
+            # if we've started, and currently are doing no work
+        end
         message = take!(work_chl)
+        local message
+        sleep(1)
 
         # route message
         if message.name == :finish
@@ -76,7 +149,7 @@ end
             # work message
             if !state.started
                 # signal that this worker has started
-                @printf("Starting, doing work.\n")
+                @printf("Starting\n")
                 put!(stat_chl, Message(:nonidle, myid()))
                 state.started = true
                 @assert !state.signalling & isnull(state.worker)
@@ -85,7 +158,6 @@ end
                 state.signalling = true
             elseif isnull(state.worker) || get(state.worker).state == :done
                 # not currently doing work, so do work
-                @printf("Doing work.\n")
                 state.worker = @schedule do_work(message, res_chl)
             elseif !state.signalling
                 # signal that we're nonidle
@@ -122,9 +194,9 @@ end
                 other_worker_chl = work_chls[other_worker_idx]
                 # if we have work messages
                 if isready(work_chl) && fetch(work_chl).name == :work
-                    work = take!(work_chl)
-                    @printf("|>> Sending :work to worker %d: %s.\n", message.content, string(work))
-                    put!(other_worker_chl, work)
+                    next_message = take!(work_chl)
+                    @printf("|>> Sending %s to worker %d.\n", string(next_message), message.content)
+                    put!(other_worker_chl, next_message)
                 else
                     # no work to share
                     @printf("|>> Sending :nowork to worker %d.\n", message.content)
@@ -181,44 +253,4 @@ function status_manager()
     end
 end
 
-@printf("Controller starting.\n")
-n = 5
-max_work = 5
-statuses[1] = :started
-exec_time = zeros(Int, nworkers())
-@sync begin
-    # controller
-    @async begin
-        for i in 1:n
-            @printf("|> Sending initial work unit %d to worker %d.\n", i, workers()[1])
-            put!(work_chls[1], Message(:work, rand(1:max_work)))
-        end
-    end
-
-    for pid in workers()
-        @printf("Starting worker on process %d.\n", pid)
-        @async remote_do(worker, pid, work_chls, res_chl, stat_chl)
-    end
-
-    @schedule begin
-        for i in 1:n
-            result = take!(res_chl)
-            p_idx = nworkers() > 1 ? result[1] - 1 : result[1]
-            exec_time[p_idx] += result[2]
-        end
-    end
-
-    @async status_manager()
-
-end
-
-@sync begin
-    @printf("SIG: Signalling to workers to finish.\n")
-    for chl in work_chls
-        @async put!(chl, Message(:finish, -1))
-    end
-end
-print("Controller terminating.\n")
-for i in 1:nworkers()
-    @printf("Worker %d spent %g seconds doing work.\n", workers()[i], exec_time[i])
-end
+controller()
