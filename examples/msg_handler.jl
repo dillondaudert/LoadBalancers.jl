@@ -19,8 +19,55 @@ addprocs(1)
     id::Int
 end
 
-const msg_chl = RemoteChannel(()->Channel{Message}(10), workers()[1])
-const stat_chl = RemoteChannel(()->Channel{Message}(1), 1)
+@everywhere function msg_handler(msg_chl, _local_chl)
+    @printf("Message Handler begun.\n")
+    while true
+        msg = take!(msg_chl)
+
+        @printf("Handler received %s message.\n", string(msg))
+
+        # handle :end
+        if msg.name == :end
+            put!(_local_chl, msg)
+            break
+        # handle :work
+        elseif msg.name == :work
+            put!(_local_chl, msg)
+
+        # handle :idle
+        elseif msg.name == :idle
+            idle = true
+            # IDEA: Message controller and get more work?
+        # handle :nonidle
+        elseif msg.name == :nonidle
+            idle = false
+        end
+
+    end
+end
+    
+@everywhere function subworker(msg_chl, _local_chl)
+    @printf("Worker subtask begun.\n")
+    while true
+        wait(_local_chl)
+        @printf("Worker sending :nonidle message.\n")
+        put!(msg_chl, Message(:nonidle, myid()))
+        while isready(_local_chl)
+            msg = take!(_local_chl)
+
+            @printf("Worker received %s message.\n", string(msg))
+
+            # handle :end
+            if msg.name == :end
+                return
+            elseif msg.name == :work
+                sleep(rand(1:5))                        
+            end
+        end
+        @printf("Worker sending :idle message.\n")
+        put!(msg_chl, Message(:idle, myid()))
+    end
+end
 
 @everywhere function worker(msg_chl, stat_chl)
     
@@ -29,68 +76,20 @@ const stat_chl = RemoteChannel(()->Channel{Message}(1), 1)
     
     @sync begin
         @printf("Worker begun.\n")
-        
         # MESSAGE HANDLER SUBTASK
-        @async begin
-            @printf("Message Handler begun.\n")
-            while true
-                msg = take!(msg_chl)
-                
-                @printf("Handler received %s message.\n", string(msg))
-                
-                # handle :end
-                if msg.name == :end
-                    put!(_local_chl, msg)
-                    break
-                # handle :work
-                elseif msg.name == :work
-                    put!(_local_chl, msg)
-                                        
-                # handle :idle
-                elseif msg.name == :idle
-                    idle = true
-                    # IDEA: Message controller and get more work?
-                # handle :nonidle
-                elseif msg.name == :nonidle
-                    idle = false
-                end
-                
-            end
-        end
-        
+        @async msg_handler(msg_chl, _local_chl)
         # SUBTASK 1
-        @async begin
-            @printf("Worker subtask begun.\n")
-            while true
-                wait(_local_chl)
-                @printf("Worker sending :nonidle message.\n")
-                put!(msg_chl, Message(:nonidle, myid()))
-                while isready(_local_chl)
-                    msg = take!(_local_chl)
-
-                    @printf("Worker received %s message.\n", string(msg))
-
-                    # handle :end
-                    if msg.name == :end
-                        return
-                    elseif msg.name == :work
-                        sleep(rand(1:5))                        
-                    end
-                end
-                @printf("Worker sending :idle message.\n")
-                put!(msg_chl, Message(:idle, myid()))
-            end
-        end
-        
+        @async subworker(msg_chl, _local_chl)
     end
-    
     put!(stat_chl, Message(:done, myid()))
-    
 end
 
+
 @printf("Starting.\n")
+const msg_chl = RemoteChannel(()->Channel{Message}(10), workers()[1])
+const stat_chl = RemoteChannel(()->Channel{Message}(1), 1)
+
 @sync begin
-    
     # create task to send messages to worker
     @async begin
         @printf("Controller work producer begun.\n")
