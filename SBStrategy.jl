@@ -1,4 +1,15 @@
-# subtask_handler, now with multiple workers
+# Scheduler-Based adaptive load balancing strategy
+# OVERVIEW
+# The controller acts as a scheduler and keeps an idle-status list
+# - Worker i alerts the controller that it is non-idle
+# - The controller sends the id of an idle worker j to worker i
+#     and sets the status of j to non-idle
+# - Worker i will then send work to j, or a message that it has 
+#     no available work
+# - Worker j then begins working or sends a message to the 
+#     controller that it is idle.
+
+
 @printf("Num workers: %d.\n", nworkers())
 print("Worker Process IDs: ", workers())
 
