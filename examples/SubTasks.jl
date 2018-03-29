@@ -2,18 +2,22 @@
 
 module SubTasks
 
+export Message, _worker, _msg_handler, _jlancer
+
 struct Message
     kind::Symbol
     data::Int64
 end
+
+# --- message handlers
 
 function _msg_handler(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Message}})
     """
     Receive messages on the remote channel msg_chl. Depending on the message,
     different actions will be taken:
         :work - Pass from the remote channel to local_chl
-        :idle - Print 
-        :nonidle - Print
+        :_idle - Print 
+        :_nonidle - Print
         :end  - Pass to local_chl and exit.
     """
 
@@ -25,14 +29,86 @@ function _msg_handler(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channe
             break
         elseif msg.kind == :work
             put!(local_chl, msg)
-        elseif msg.kind == :idle
+        elseif msg.kind == :_idle
             @printf("_msg_handler received idle signal from _worker on %d.\n", msg.data)
-        elseif msg.kind == :nonidle
+        elseif msg.kind == :_nonidle
             @printf("_msg_handler received nonidle signal from _worker on %d.\n", msg.data)
         end
 
     end
 end
+
+function _msg_handler(local_chl::Channel{Message}, 
+                      msg_chls::Array{RemoteChannel{Channel{Message}}},
+                      stat_chl::RemoteChannel{Channel{Message}})
+    """
+    Receive messages on its remote channel. Depending on the message,
+    different actions will be taken:
+    External Messages: (Could come from anywhere)
+        :work - Pass from the remote channel to local_chl
+        :jlance - Start a new task that will attempt to send work in local_chl
+                  to the remote worker specified by this message
+        :nowork - Another worker failed to send work to this worker; pass an :idle
+                  message to the controller via stat_chl
+        :end  - Pass to local_chl and exit.
+    Internal Messages: (Expect to receive these only from other tasks on this process)
+        :_idle - Send an :idle message to the controller via stat_chl 
+        :_nonidle - Send a :nonidle message to the controller via stat_chl
+    """
+
+    w_idx = indexin([myid()], workers())[1]
+    #@printf("_msg_handler attaching to channel index %d.\n", w_idx)
+    msg_chl = msg_chls[w_idx]
+
+    while true
+        msg = take!(msg_chl)
+
+        if msg.kind == :end
+            put!(local_chl, msg)
+            break
+
+        elseif msg.kind == :work
+            put!(local_chl, msg)
+
+        elseif msg.kind == :nowork
+            put!(stat_chl, Message(:idle, myid()))
+
+        elseif msg.kind == :jlance && msg.data > 0
+            # attempt to load balance
+            @schedule _jlancer(msg, local_chl, msg_chls)
+
+        elseif msg.kind == :_idle
+            put!(stat_chl, Message(:idle, myid()))
+
+        elseif msg.kind == :_nonidle
+            put!(stat_chl, Message(:nonidle, myid()))
+
+        end
+
+    end
+end
+
+# --- jlancers
+function _jlancer(msg::Message,
+                  local_chl::Channel{Message},
+                  msg_chls::Array{RemoteChannel{Channel{Message}}})
+    # attempt to move some local work to the remote worker
+    other_w_idx = indexin([msg.data], workers())[1]
+    other_msg_chl = msg_chls[other_w_idx]
+    if isready(local_chl)
+        work = take!(local_chl)
+        @assert work.kind == :work
+        @printf("_jlancer passing work to worker %d.\n", msg.data)
+        put!(work, other_msg_chl)
+    else
+        @printf("_jlancer has no work to pass to %d.\n", msg.data)
+        put!(Message(:nowork, myid()), other_msg_chl)
+    end
+
+end
+
+
+# --- workers
 
 function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Message}})
     """
@@ -42,8 +118,8 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
         :work
         :end - This worker will exit upon receiving this message
     This worker also produces two message kinds (|> msg_chl)
-        :idle - Signal that this worker is idle (local_chl empty)
-        :nonidle - Signal that this worker is nonidle
+        :_idle - Signal that this worker is idle (local_chl empty)
+        :_nonidle - Signal that this worker is nonidle
     """
 
     idle::Bool = true
@@ -53,6 +129,8 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
         # REMARK: Could this block indefinitely if :end arrives before this call to wait() and,
         #         since no messages are expected to arrive after :end, this waits for another
         #         value to be appended. Should we assert that the channel is empty at this point?
+        # REMARK: One way of solving this could be to have the msg_handler signal on the local
+        #         channels put_cond... perhaps
         @assert length(local_chl.data) == 0
         wait(local_chl)
 
@@ -69,7 +147,7 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
                 # if this worker has been idle, signal it is no longer idle
                 if idle
                     idle = false
-                    put!(msg_chl, Message(:nonidle, myid()))
+                    put!(msg_chl, Message(:_nonidle, myid()))
                 end
 
                 # do work
@@ -84,11 +162,9 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
         # local_chl is now empty
         if !idle
             idle = true
-            put!(msg_chl, Message(:idle, myid()))
+            put!(msg_chl, Message(:_idle, myid()))
         end
     end
 end # end _worker function
-
-export Message, _worker, _msg_handler
 
 end # End SubTasks Module
