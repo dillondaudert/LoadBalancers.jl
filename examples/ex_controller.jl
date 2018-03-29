@@ -8,7 +8,8 @@ print("Worker Process IDs: ", workers())
                             stat_chl::RemoteChannel{Channel{Message}})
     
     local_chl = Channel{Message}(10)
-    w_idx = indexin([myid()], workers())[1]
+    w_idx = nprocs() > 1 ? myid() - 1 : myid()
+    @printf("WORKER %D W_IDX: %d.\n", myid(), w_idx)
     my_msg_chl = msg_chls[w_idx]
 
     
@@ -34,7 +35,7 @@ function status_manager()
     # while there are any started, nonidle nodes
     while any((statuses .!= :unstarted) .& (statuses .!= :idle))
         status_msg = take!(stat_chl)
-        w_idx = indexin([status_msg.data], workers())[1]
+        w_idx = nprocs() > 1 ? status_msg.data - 1 : status_msg.data
 
         if status_msg.kind == :idle
             # mark this worker as idle
