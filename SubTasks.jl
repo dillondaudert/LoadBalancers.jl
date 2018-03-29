@@ -57,7 +57,6 @@ function _msg_handler(local_chl::Channel{Message},
     """
 
     w_idx = nprocs() > 1 ? myid() - 1 : myid()
-    @printf("_msg_handler attaching to channel index %d.\n", w_idx)
     msg_chl = msg_chls[w_idx]
 
     while true
@@ -141,7 +140,6 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
 
             # if this message is end, exit
             if msg.kind == :end
-                @printf("_worker terminating\n")
                 return
             elseif msg.kind == :work
                 # if this worker has been idle, signal it is no longer idle
