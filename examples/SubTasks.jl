@@ -56,8 +56,8 @@ function _msg_handler(local_chl::Channel{Message},
         :_nonidle - Send a :nonidle message to the controller via stat_chl
     """
 
-    w_idx = indexin([myid()], workers())[1]
-    #@printf("_msg_handler attaching to channel index %d.\n", w_idx)
+    w_idx = nprocs() > 1 ? myid() - 1 : myid()
+    @printf("_msg_handler attaching to channel index %d.\n", w_idx)
     msg_chl = msg_chls[w_idx]
 
     while true
@@ -93,7 +93,7 @@ function _jlancer(msg::Message,
                   local_chl::Channel{Message},
                   msg_chls::Array{RemoteChannel{Channel{Message}}})
     # attempt to move some local work to the remote worker
-    other_w_idx = indexin([msg.data], workers())[1]
+    other_w_idx = nprocs() > 1 ? msg.data - 1 : msg.data
     other_msg_chl = msg_chls[other_w_idx]
     if isready(local_chl)
         work = take!(local_chl)
