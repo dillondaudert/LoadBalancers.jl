@@ -59,6 +59,8 @@ function _msg_handler(local_chl::Channel{Message},
     w_idx = nprocs() > 1 ? myid() - 1 : myid()
     msg_chl = msg_chls[w_idx]
 
+    @assert msg_chl.where == myid()
+
     while true
         msg = take!(msg_chl)
 
@@ -149,7 +151,7 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
                 end
 
                 # do work
-                @printf("_worker working for rand(1:%d) seconds.\n", msg.data)
+                @printf("_work %d.\n", msg.data)
                 sleep(rand(1:msg.data))
             else
                 @printf("_worker received unrecognized message! %s\n", string(msg))
