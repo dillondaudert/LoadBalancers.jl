@@ -9,10 +9,6 @@
 # - Worker j then begins working or sends a message to the 
 #     controller that it is idle.
 
-
-@printf("Num workers: %d.\n", nworkers())
-print("Worker Process IDs: ", workers())
-
 @everywhere using SubTasks
 
 @everywhere function worker(msg_chls::Array{RemoteChannel{Channel{Message}}},
@@ -20,12 +16,11 @@ print("Worker Process IDs: ", workers())
     
     local_chl = Channel{Message}(10)
     w_idx = nprocs() > 1 ? myid() - 1 : myid()
-    @printf("WORKER %D W_IDX: %d.\n", myid(), w_idx)
     my_msg_chl = msg_chls[w_idx]
 
     
     @printf("Worker begun.\n")
-    @sync begin
+    @profile @sync begin
         # MESSAGE HANDLER SUBTASK
         @async _msg_handler(local_chl, msg_chls, stat_chl)
         # SUBTASK 1
@@ -33,16 +28,13 @@ print("Worker Process IDs: ", workers())
     end
     @printf("Worker terminating.\n")
     put!(stat_chl, Message(:done, myid()))
+
+    Profile.print()
 end
 
-
-@printf("Starting.\n")
-const msg_chls = [RemoteChannel(()->Channel{Message}(20), pid) for pid in workers()]
-const stat_chl = RemoteChannel(()->Channel{Message}(nworkers()), 1)
-const statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
-
-function status_manager()
-    @printf("Status manager started.\n")
+function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
+                        stat_chl::RemoteChannel{Channel{Message}},
+                        statuses::Array{Symbol})
     # while there are any started, nonidle nodes
     while any((statuses .!= :unstarted) .& (statuses .!= :idle))
         status_msg = take!(stat_chl)
@@ -78,22 +70,29 @@ function status_manager()
     end
 end
 
+@printf("Starting.\n")
+const msg_chls = [RemoteChannel(()->Channel{Message}(20), pid) for pid in workers()]
+const stat_chl = RemoteChannel(()->Channel{Message}(nworkers()), 1)
+const statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
+
+
 @sync begin
+    # start the worker processes
+    for i = 1:nworkers()
+        @async remote_do(worker, workers()[i], msg_chls, stat_chl)
+    end
+
     @sync begin
         statuses[1] = :started
         # create the work producer process
         @async begin
-            nwork = 15
+            nwork = 8*nworkers()
             for i = 1:nwork
                 put!(msg_chls[1], Message(:work, rand(1:6)))
             end
         end
-        # start the worker processes
-        for i = 1:nworkers()
-            @async remote_do(worker, workers()[i], msg_chls, stat_chl)
-        end
 
-        @async status_manager()
+        @async status_manager(msg_chls, stat_chl, statuses)
     end
 
     @printf("Sending :end messages to workers.\n")
