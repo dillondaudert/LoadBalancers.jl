@@ -20,7 +20,7 @@
 
     
     @printf("Worker begun.\n")
-    @profile @sync begin
+    @sync begin
         # MESSAGE HANDLER SUBTASK
         @async _msg_handler(local_chl, msg_chls, stat_chl)
         # SUBTASK 1
@@ -29,7 +29,7 @@
     @printf("Worker terminating.\n")
     put!(stat_chl, Message(:done, myid()))
 
-    Profile.print(combine=true, mincount=80)
+    #Profile.print(combine=true, mincount=80)
 end
 
 function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
@@ -70,12 +70,21 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
     end
 end
 
+function send_jobs(msg_chl)
+    nwork = 8*nworkers()
+    for i = 1:nwork
+#        @printf("Sending work %d.\n", i)
+        put!(msg_chl, Message(:work, rand(1:4)))
+    end
+end
+
 @printf("Controller starting.\n")
 
 @sync begin
     local msg_chls = [RemoteChannel(()->Channel{Message}(20), pid) for pid in workers()]
     local stat_chl = RemoteChannel(()->Channel{Message}(nworkers()), 1)
     local statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
+
     # start the worker processes
     for i = 1:nworkers()
         #@async remote_do(worker, workers()[i], msg_chls, stat_chl)
@@ -84,13 +93,8 @@ end
 
     @sync begin
         statuses[1] = :started
-        # create the work producer process
-        @async begin
-            nwork = 8*nworkers()
-            for i = 1:nwork
-                put!(msg_chls[1], Message(:work, rand(1:4)))
-            end
-        end
+
+        @async send_jobs(msg_chls[1])
 
         @async status_manager(msg_chls, stat_chl, statuses)
     end
