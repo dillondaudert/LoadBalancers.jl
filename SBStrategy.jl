@@ -29,7 +29,7 @@
     @printf("Worker terminating.\n")
     put!(stat_chl, Message(:done, myid()))
 
-    Profile.print()
+    Profile.print(combine=true, mincount=80)
 end
 
 function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
@@ -70,16 +70,16 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
     end
 end
 
-@printf("Starting.\n")
-const msg_chls = [RemoteChannel(()->Channel{Message}(20), pid) for pid in workers()]
-const stat_chl = RemoteChannel(()->Channel{Message}(nworkers()), 1)
-const statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
-
+@printf("Controller starting.\n")
 
 @sync begin
+    local msg_chls = [RemoteChannel(()->Channel{Message}(20), pid) for pid in workers()]
+    local stat_chl = RemoteChannel(()->Channel{Message}(nworkers()), 1)
+    local statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
     # start the worker processes
     for i = 1:nworkers()
-        @async remote_do(worker, workers()[i], msg_chls, stat_chl)
+        #@async remote_do(worker, workers()[i], msg_chls, stat_chl)
+        @spawnat workers()[i] worker(msg_chls, stat_chl)
     end
 
     @sync begin
@@ -88,7 +88,7 @@ const statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
         @async begin
             nwork = 8*nworkers()
             for i = 1:nwork
-                put!(msg_chls[1], Message(:work, rand(1:6)))
+                put!(msg_chls[1], Message(:work, rand(1:4)))
             end
         end
 
