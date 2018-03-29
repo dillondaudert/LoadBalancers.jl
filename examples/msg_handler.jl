@@ -47,15 +47,15 @@ end
 end
     
 @everywhere function subworker(msg_chl, _local_chl)
-    @printf("Worker subtask begun.\n")
+    @printf("Subworker subtask begun.\n")
     while true
         wait(_local_chl)
-        @printf("Worker sending :nonidle message.\n")
+        @printf("Subworker sending :nonidle message.\n")
         put!(msg_chl, Message(:nonidle, myid()))
         while isready(_local_chl)
             msg = take!(_local_chl)
 
-            @printf("Worker received %s message.\n", string(msg))
+            @printf("Subworker received %s message.\n", string(msg))
 
             # handle :end
             if msg.name == :end
@@ -64,7 +64,7 @@ end
                 sleep(rand(1:5))                        
             end
         end
-        @printf("Worker sending :idle message.\n")
+        @printf("Subworker sending :idle message.\n")
         put!(msg_chl, Message(:idle, myid()))
     end
 end
