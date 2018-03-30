@@ -75,8 +75,9 @@ function _msg_handler(local_chl::Channel{Message},
             put!(stat_chl, Message(:idle, myid()))
 
         elseif msg.kind == :jlance && msg.data > 0
+            local wrk_msg::Message = msg
             # attempt to load balance
-            @schedule _jlancer(msg, local_chl, msg_chls)
+            @schedule _jlancer(wrk_msg, local_chl, msg_chls)
 
         elseif msg.kind == :_idle
             put!(stat_chl, Message(:idle, myid()))
@@ -135,6 +136,8 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
         @assert length(local_chl.data) == 0
         wait(local_chl)
 
+        last_signal = time()
+
         # while there are messages in the local channel
         while isready(local_chl)
 
@@ -146,12 +149,20 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
             elseif msg.kind == :work
                 # if this worker has been idle, signal it is no longer idle
                 if idle
+                    @printf("%d WORKING %d\n", myid(), myid())
                     idle = false
+                    last_signal = time()
                     put!(msg_chl, Message(:_nonidle, myid()))
+                # if it has been 1 second since the last nonsignal message
+                
+                elseif time() - last_signal > 1
+                    # sleep to force the scheduler to switch to another (hopefully jlance) task
+                    sleep(0.05)
+                    put!(msg_chl, Message(:_nonidle, myid()))
+                    last_signal = time()
                 end
 
                 # do work
-                @printf("_work %d.\n", msg.data)
                 sleep(rand(1:msg.data))
             else
                 @printf("_worker received unrecognized message! %s\n", string(msg))
@@ -161,6 +172,7 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
 
         # local_chl is now empty
         if !idle
+            @printf("IDLE\n")
             idle = true
             put!(msg_chl, Message(:_idle, myid()))
         end
