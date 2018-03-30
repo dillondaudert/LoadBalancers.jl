@@ -19,14 +19,12 @@
     my_msg_chl = msg_chls[w_idx]
 
     
-    @printf("Worker begun.\n")
     @sync begin
         # MESSAGE HANDLER SUBTASK
         @async _msg_handler(local_chl, msg_chls, stat_chl)
         # SUBTASK 1
         @async _worker(local_chl, my_msg_chl)
     end
-    @printf("Worker terminating.\n")
     put!(stat_chl, Message(:done, myid()))
 
     #Profile.print(combine=true, mincount=80)
@@ -42,11 +40,9 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
 
         if status_msg.kind == :idle
             # mark this worker as idle
-            @printf("Worker %d marked as idle.\n", status_msg.data)
             statuses[w_idx] = :idle
 
         elseif status_msg.kind == :nonidle
-            @printf("Worker %d signalling nonidle.\n", status_msg.data)
             statuses[w_idx] = :nonidle
 
             # look for a nonbusy worker
@@ -58,12 +54,10 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
 
             if length(idle_idxs) == 0
                 # no idle workers
-                @printf("Sending worker %d Message(:jlance, -1).\n", status_msg.data)
                 put!(w_msg_chl, Message(:jlance, -1))
             else
                 # randomly select the index of an idle worker
                 idle_w_idx = rand(idle_idxs)
-                @printf("Telling worker %d to send work to worker %d.\n", status_msg.data, workers()[idle_w_idx])
                 put!(w_msg_chl, Message(:jlance, workers()[idle_w_idx]))
             end
         end
