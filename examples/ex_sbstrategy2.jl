@@ -88,6 +88,7 @@ end
     while true
         wait(_local_work_chl)
         while isready(_local_work_chl)
+            local work_message
             work_message = take!(_local_work_chl)
             if work_message.name == :finish
                 return
@@ -189,6 +190,7 @@ end
             # message from controller with an idle worker id
 
             if message.content != -1
+                local next_message
                 # load-balance message
                 other_worker_idx = nworkers() > 1 ? message.content-1 : message.content
                 other_worker_chl = work_chls[other_worker_idx]
