@@ -58,6 +58,7 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
             else
                 # randomly select the index of an idle worker
                 idle_w_idx = rand(idle_idxs)
+                statuses[idle_w_idx] = :nonidle
                 put!(w_msg_chl, Message(:jlance, workers()[idle_w_idx]))
             end
         end
