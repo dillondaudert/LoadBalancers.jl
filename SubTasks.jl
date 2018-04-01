@@ -103,10 +103,10 @@ function _jlancer(msg::Message,
     if isready(local_chl)
         work = take!(local_chl)
         @assert work.kind == :work
-        @printf("%d_jlancer passing work to worker %d.\n", myid(), msg.data)
+        @printf("%d jlancer passing work to worker %d.\n", myid(), msg.data)
         put!(other_msg_chl, work)
     else
-        @printf("%d_jlancer has no work to pass to %d.\n", myid(), msg.data)
+        @printf("%d jlancer has no work to pass to %d.\n", myid(), msg.data)
         put!(other_msg_chl, Message(:nowork, myid()))
     end
 
