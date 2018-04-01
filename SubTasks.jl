@@ -100,10 +100,10 @@ function _jlancer(msg::Message,
     if isready(local_chl)
         work = take!(local_chl)
         @assert work.kind == :work
-        @printf("_jlancer passing work to worker %d.\n", msg.data)
+        @printf("%d_jlancer passing work to worker %d.\n", myid(), msg.data)
         put!(other_msg_chl, work)
     else
-        @printf("_jlancer has no work to pass to %d.\n", msg.data)
+        @printf("%d_jlancer has no work to pass to %d.\n", myid(), msg.data)
         put!(other_msg_chl, Message(:nowork, myid()))
     end
 
@@ -149,15 +149,13 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
             elseif msg.kind == :work
                 # if this worker has been idle, signal it is no longer idle
                 if idle
-                    @printf("%d WORKING %d\n", myid(), myid())
+                    @printf("%d_working\n", myid())
                     idle = false
                     last_signal = time()
                     put!(msg_chl, Message(:_nonidle, myid()))
                 # if it has been 1 second since the last nonsignal message
                 
                 elseif time() - last_signal > 1
-                    # sleep to force the scheduler to switch to another (hopefully jlance) task
-                    sleep(0.05)
                     put!(msg_chl, Message(:_nonidle, myid()))
                     last_signal = time()
                 end
@@ -172,7 +170,7 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
 
         # local_chl is now empty
         if !idle
-            @printf("IDLE\n")
+            @printf("%d_idle\n", myid())
             idle = true
             put!(msg_chl, Message(:_idle, myid()))
         end
