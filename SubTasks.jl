@@ -7,7 +7,10 @@ export Message, _worker, _msg_handler, _jlancer
 struct Message
     kind::Symbol
     data::Int64
+    _data2::Int64 # TODO: rename data and _data2 to more sensible names
 end
+
+Message(kind, data) = Message(kind, data, -1)
 
 # --- message handlers
 
