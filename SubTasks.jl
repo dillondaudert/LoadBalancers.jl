@@ -115,7 +115,9 @@ end
 
 # --- workers
 
-function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Message}})
+function _worker(local_chl::Channel{Message},
+                 msg_chl::RemoteChannel{Channel{Message}},
+                 res_chl::RemoteChannel{Channel{Message}})
     """
     Pull work from local_chl to compute, and send status
     updates to msg_chl.
@@ -148,11 +150,12 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
 
             # if this message is end, exit
             if msg.kind == :end
+                put!(res_chl, Message(:end, myid()))
                 return
             elseif msg.kind == :work
                 # if this worker has been idle, signal it is no longer idle
                 if idle
-                    @printf("%d_working\n", myid())
+                    @printf("%d working\n", myid())
                     idle = false
                     last_signal = time()
                     put!(msg_chl, Message(:_nonidle, myid()))
@@ -164,7 +167,8 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
                 end
 
                 # do work
-                sleep(rand(1:msg.data))
+                sleep(msg.data)
+                put!(res_chl, Message(:work, myid(), msg.data))
             else
                 @printf("_worker received unrecognized message! %s\n", string(msg))
                 exit()
@@ -173,7 +177,7 @@ function _worker(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Mes
 
         # local_chl is now empty
         if !idle
-            @printf("%d_idle\n", myid())
+            @printf("%d idle\n", myid())
             idle = true
             put!(msg_chl, Message(:_idle, myid()))
         end
