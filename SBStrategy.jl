@@ -69,7 +69,8 @@ end
 function send_jobs(msg_chl)
     nwork = 15*nworkers()
     for i = 1:nwork
-        put!(msg_chl, Message(:work, rand(1:4)))
+        # calls remotecall_fetch on the worker; don't wait
+        @schedule put!(msg_chl, Message(:work, rand(1:4)))
     end
 end
 
