@@ -88,9 +88,7 @@ function _msg_handler(local_chl::Channel{Message},
         elseif msg.kind == :_nonidle
             # put! on remote chl blocks, so schedule in different task
             @schedule put!(stat_chl, Message(:nonidle, myid()))
-
         end
-
     end
 end
 
@@ -102,7 +100,7 @@ function _jlancer(msg::Message,
     other_w_idx = nprocs() > 1 ? msg.data - 1 : msg.data
     other_msg_chl = msg_chls[other_w_idx]
     if isready(local_chl)
-        work = take!(local_chl)
+        local work = take!(local_chl)
         @assert work.kind == :work
         @printf("%d jlancer passing work to worker %d.\n", myid(), msg.data)
         put!(other_msg_chl, work)
@@ -110,7 +108,6 @@ function _jlancer(msg::Message,
         @printf("%d jlancer has no work to pass to %d.\n", myid(), msg.data)
         put!(other_msg_chl, Message(:nowork, myid()))
     end
-
 end
 
 

@@ -67,7 +67,7 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
 end
 
 @everywhere function send_jobs(msg_chl)
-    nwork = 5*nworkers()
+    nwork = 15*nworkers()
     for i = 1:nwork
         # calls remotecall_fetch on the worker; don't wait
         put!(msg_chl, Message(:work, rand(1:4)))
