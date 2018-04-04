@@ -86,7 +86,8 @@ function _msg_handler(local_chl::Channel{Message},
             put!(stat_chl, Message(:idle, myid()))
 
         elseif msg.kind == :_nonidle
-            put!(stat_chl, Message(:nonidle, myid()))
+            # put! on remote chl blocks, so schedule in different task
+            @schedule put!(stat_chl, Message(:nonidle, myid()))
 
         end
 
