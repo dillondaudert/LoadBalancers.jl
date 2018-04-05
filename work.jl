@@ -17,7 +17,7 @@ function split_work(work::WorkUnit, p::T where T<:AbstractFloat)
     # check that valid percentage
     !(0 < p < 1) && (@printf("p must be: 0 < p < 1, got %g\n", p); throw(DomainError()))
     
-    u_units = ceil(Int32, work.units * p)
+    u_units = ceil(typeof(work.units), work.units * p)
     v_units = work.units - u_units
 
     return WorkUnit(u_units, work.unitcost), WorkUnit(v_units, work.unitcost)
