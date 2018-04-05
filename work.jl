@@ -16,6 +16,8 @@ function split_work(work::WorkUnit, p::T where T<:AbstractFloat)
 
     # check that valid percentage
     !(0 < p < 1) && (@printf("p must be: 0 < p < 1, got %g\n", p); throw(DomainError()))
+    # check that there are at least 2 units
+    work.units ≤ 1 && (@printf("work must have more than 2 units\n"); throw(DomainError()))
 
     # set the rounding mode to up or down depending on p
     mode = p ≤ .5 ? RoundUp : RoundDown
