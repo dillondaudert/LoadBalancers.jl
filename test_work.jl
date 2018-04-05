@@ -3,14 +3,23 @@ using Base.Test
 include("work.jl")
 
 
+@testset "WorkUnit constructor tests"  begin
+    @test_throws ErrorException WorkUnit(0, 2)
+    @test_throws ErrorException WorkUnit(2, 0)
+    @test_throws ErrorException WorkUnit(0, 0)
+    @test typeof(WorkUnit(2, 3)) == WorkUnit{typeof(2)}
+end
+
 @testset "split_work tests" begin
     testwork = WorkUnit(10, 3)
     testwork2 = WorkUnit(555, 4)
     testwork3 = WorkUnit(1, 1)
 
-    @test_throws DomainError split_work(testwork, -0.5)
-    @test_throws DomainError split_work(testwork2, 1.63)
-    @test_throws DomainError split_work(testwork3, .5)
+    @testset "split_work domain tests" begin
+        @test_throws DomainError split_work(testwork, -0.5)
+        @test_throws DomainError split_work(testwork2, 1.63)
+        @test_throws DomainError split_work(testwork3, .5)
+    end
 
     @testset "split_work 50% test" begin
         u1, v1 = split_work(testwork, 0.5)
