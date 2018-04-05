@@ -68,21 +68,23 @@ end
 
 @everywhere function send_jobs(msg_chl)
     nwork = 15*nworkers()
-    for i = 1:nwork
-        # calls remotecall_fetch on the worker; don't wait
-        put!(msg_chl, Message(:work, rand(1:4)))
-    end
+    cost = 3
+    # calls remotecall_fetch on the worker; don't wait
+    put!(msg_chl, Message(:work, myid(), WorkUnit(nwork, cost)))
 end
 
 function recv_results(res_chl)
     n_ended = 0
+    res_count = 0
     total_work_done = zeros(Int64, nworkers())
     while n_ended < nworkers()
         work = take!(res_chl)
         if work.kind == :work
+            res_count += 1
             w_idx = nprocs() > 1 ? work.data - 1 : work.data
             # add the work this worker did
             total_work_done[w_idx] += work._data2
+            @printf("Receiving results #%d from worker %d.\n", res_count, work.data)
         elseif work.kind == :end
             n_ended += 1
         end

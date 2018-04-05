@@ -1,13 +1,14 @@
 # useful generic subtasks that can be reused
 
 module SubTasks
+include("work.jl")
 
-export Message, _worker, _msg_handler, _jlancer
+export WorkUnit, Message, _worker, _msg_handler, _jlancer
 
 struct Message
     kind::Symbol
     data::Int64
-    _data2::Int64 # TODO: rename data and _data2 to more sensible names
+    _data2 # TODO: rename data and _data2 to more sensible names
 end
 
 Message(kind, data) = Message(kind, data, -1)
@@ -144,7 +145,7 @@ function _worker(local_chl::Channel{Message},
         # while there are messages in the local channel
         while isready(local_chl)
 
-            msg = take!(local_chl)
+            local msg = take!(local_chl)
 
             # if this message is end, exit
             if msg.kind == :end
@@ -165,8 +166,29 @@ function _worker(local_chl::Channel{Message},
                 end
 
                 # do work
-                sleep(msg.data)
-                put!(res_chl, Message(:work, myid(), msg.data))
+                local work = msg._data2
+
+                if work.units > 1
+                    # split the work
+                    work_1, work_2 = split_work(work)
+
+                    # place the extra work back in the local channel
+                    put!(local_chl, Message(:work, myid(), work_2))
+                else
+                    work_1 = work
+                end
+
+                # simulate calculation
+                sleep(work_1.unitcost)
+
+                # take 1 down, pass it around
+                work_1.units -= 1
+                if work_1.units > 0
+                    # place back in local channel
+                    put!(local_chl, Message(:work, myid(), work_1))
+                end
+
+                put!(res_chl, Message(:work, myid(), work_1.unitcost))
             else
                 @printf("_worker received unrecognized message! %s\n", string(msg))
                 exit()
