@@ -3,6 +3,8 @@ using Base.Test
 include("work.jl")
 
 
+@testset "work.jl Tests" begin
+
 @testset "WorkUnit constructor tests"  begin
     @test_throws ErrorException WorkUnit(-1, 2)
     @test_throws ErrorException WorkUnit(2, 0)
@@ -47,5 +49,7 @@ end
         @test u2.units == 554
         @test v2.units == 1
     end
+
+end
 
 end
