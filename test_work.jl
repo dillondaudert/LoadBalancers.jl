@@ -4,7 +4,7 @@ include("work.jl")
 
 
 @testset "WorkUnit constructor tests"  begin
-    @test_throws ErrorException WorkUnit(0, 2)
+    @test_throws ErrorException WorkUnit(-1, 2)
     @test_throws ErrorException WorkUnit(2, 0)
     @test_throws ErrorException WorkUnit(0, 0)
     @test typeof(WorkUnit(2, 3)) == WorkUnit{typeof(2)}

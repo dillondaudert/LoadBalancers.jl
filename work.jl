@@ -1,9 +1,9 @@
 # helper functions for simulating work
 
-struct WorkUnit{T<:Int}
+mutable struct WorkUnit{T<:Int}
     units::T
     unitcost::T
-    WorkUnit{T}(u, c) where {T<:Int} = u ≤ 0 || c ≤ 0 ? error("units or cost less than 0") : new(u, c)
+    WorkUnit{T}(u, c) where {T<:Int} = u < 0 || c ≤ 0 ? error("negative units or cost less than 0") : new(u, c)
 end
 WorkUnit(u::T, c::T) where {T<:Int} = WorkUnit{T}(u, c)
 
@@ -33,3 +33,11 @@ end
 
 # generate a random percentage from the closed interval (0, 1)
 split_work(work::WorkUnit) = (p = rand(1:999); split_work(work, p/1000))
+
+# do work
+function do_work(work::WorkUnit)
+    """
+    Simulate doing work.
+    Returns 
+    """
+end
