@@ -19,7 +19,7 @@ function split_work(work::WorkUnit, p::T where T<:AbstractFloat)
     # check that valid percentage
     !(0 < p < 1) && (@printf("p must be: 0 < p < 1, got %g\n", p); throw(DomainError()))
     # check that there are at least 2 units
-    work.units ≤ 1 && (@printf("work must have more than 2 units\n"); throw(DomainError()))
+    work.units < 2 && (@printf("work must have more than 2 units\n"); throw(DomainError()))
 
     # set the rounding mode to up or down depending on p
     mode = p ≤ .5 ? RoundUp : RoundDown
@@ -33,11 +33,3 @@ end
 
 # generate a random percentage from the closed interval (0, 1)
 split_work(work::WorkUnit) = (p = rand(1:999); split_work(work, p/1000))
-
-# do work
-function do_work(work::WorkUnit)
-    """
-    Simulate doing work.
-    Returns 
-    """
-end
