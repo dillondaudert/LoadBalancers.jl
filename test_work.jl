@@ -5,7 +5,7 @@ include("work.jl")
 
 @testset "split_work tests" begin
     testwork = WorkUnit(10, 3)
-    testwork2 = WorkUnit(11, 4)
+    testwork2 = WorkUnit(555, 4)
     testwork3 = WorkUnit(1, 1)
 
     @test_throws DomainError split_work(testwork, -0.5)
@@ -17,8 +17,8 @@ include("work.jl")
         u2, v2 = split_work(testwork2, 0.5)
         @test u1.units == 5
         @test v1.units == 5
-        @test u2.units == 6
-        @test v2.units == 5
+        @test u2.units == 278
+        @test v2.units == 277
     end
 
     @testset "split_work 0 + ϵ test" begin
@@ -27,7 +27,7 @@ include("work.jl")
         @test u1.units == 1
         @test v1.units == 9
         @test u2.units == 1
-        @test v2.units == 10
+        @test v2.units == 554
     end
 
     @testset "split_work 1 - ϵ test" begin
@@ -35,7 +35,7 @@ include("work.jl")
         u2, v2 = split_work(testwork2, 1 - eps(Float64))
         @test u1.units == 9
         @test v1.units == 1
-        @test u2.units == 10
+        @test u2.units == 554
         @test v2.units == 1
     end
 
