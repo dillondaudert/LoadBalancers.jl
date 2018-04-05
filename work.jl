@@ -10,6 +10,8 @@ function split_work(work::WorkUnit, p::T where T<:AbstractFloat)
     Split a work into two WorkUnits, u and v, according to percentage p.
     WorkUnit u will have p*units units of work, and WorkUnit v will have
     v*(1-p) units of work.
+    Note that 0 < p < 1, as each resulting struct must have at least 1
+    unit of work.
     """
 
     # check that valid percentage
@@ -22,4 +24,5 @@ function split_work(work::WorkUnit, p::T where T<:AbstractFloat)
 
 end
 
-split_work(work::WorkUnit) = (p = rand(); split_work(work, p))
+# generate a random percentage from the closed interval (0, 1)
+split_work(work::WorkUnit) = (p = rand(1:999); split_work(work, p/1000))
