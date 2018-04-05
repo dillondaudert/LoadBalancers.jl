@@ -3,7 +3,9 @@
 struct WorkUnit{T<:Int}
     units::T
     unitcost::T
+    WorkUnit{T}(u, c) where {T<:Int} = u ≤ 0 || c ≤ 0 ? error("units or cost less than 0") : new(u, c)
 end
+WorkUnit(u::T, c::T) where {T<:Int} = WorkUnit{T}(u, c)
 
 function split_work(work::WorkUnit, p::T where T<:AbstractFloat)
     """
