@@ -15,33 +15,6 @@ Message(kind, data) = Message(kind, data, -1)
 
 # --- message handlers
 
-function _msg_handler(local_chl::Channel{Message}, msg_chl::RemoteChannel{Channel{Message}})
-    """
-    Receive messages on the remote channel msg_chl. Depending on the message,
-    different actions will be taken:
-        :work - Pass from the remote channel to local_chl
-        :_idle - Print 
-        :_nonidle - Print
-        :end  - Pass to local_chl and exit.
-    """
-
-    while true
-        msg = take!(msg_chl)
-
-        if msg.kind == :end
-            put!(local_chl, msg)
-            break
-        elseif msg.kind == :work
-            put!(local_chl, msg)
-        elseif msg.kind == :_idle
-            @printf("_msg_handler received idle signal from _worker on %d.\n", msg.data)
-        elseif msg.kind == :_nonidle
-            @printf("_msg_handler received nonidle signal from _worker on %d.\n", msg.data)
-        end
-
-    end
-end
-
 function _msg_handler(local_chl::Channel{Message}, 
                       msg_chls::Array{RemoteChannel{Channel{Message}}},
                       stat_chl::RemoteChannel{Channel{Message}})
