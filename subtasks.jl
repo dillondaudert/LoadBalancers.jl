@@ -18,16 +18,18 @@ Message(kind, data) = Message(kind, data, -1)
 """
 Receive messages on its remote channel. Depending on the message,
 different actions will be taken:
+
 External Messages: (Could come from anywhere)
-    :work - Pass from the remote channel to local_chl
-    :jlance - Start a new task that will attempt to send work in local_chl
+- :work - Pass from the remote channel to local_chl
+- :jlance - Start a new task that will attempt to send work in local_chl
               to the remote worker specified by this message
-    :nowork - Another worker failed to send work to this worker; pass an :idle
+- :nowork - Another worker failed to send work to this worker; pass an :idle
               message to the controller via stat_chl
-    :end  - Pass to local_chl and exit.
+- :end  - Pass to local_chl and exit.
+
 Internal Messages: (Expect to receive these only from other tasks on this process)
-    :_idle - Send an :idle message to the controller via stat_chl 
-    :_nonidle - Send a :nonidle message to the controller via stat_chl
+- :_idle - Send an :idle message to the controller via stat_chl 
+- :_nonidle - Send a :nonidle message to the controller via stat_chl
 """
 function _msg_handler(local_chl::Channel{Message}, 
                       msg_chls::Array{RemoteChannel{Channel{Message}}},
@@ -72,17 +74,19 @@ end
 """
 Receive messages on its remote channel. Depending on the message,
 different actions will be taken:
+
 External Messages: (Could come from anywhere)
-    :work - Pass from the remote channel to local_chl
-    :jlance - Start a new task that will attempt to send work in local_chl
+- :work - Pass from the remote channel to local_chl
+- :jlance - Start a new task that will attempt to send work in local_chl
               to the remote worker specified by this message
-    :nowork - Another worker failed to send work to this worker; request
+- :nowork - Another worker failed to send work to this worker; request
               work from a random worker.
-    :end  - Pass to local_chl and exit.
+- :end  - Pass to local_chl and exit.
+
 Internal Messages: (Expect to receive these only from other tasks on this process)
-    :_idle - Send an :idle message to the controller via stat_chl; 
+- :_idle - Send an :idle message to the controller via stat_chl; 
              Request work from a random worker.
-    :_nonidle - Send a :nonidle message to the controller via stat_chl
+- :_nonidle - Send a :nonidle message to the controller via stat_chl
 """
 function _msg_handler_rp(local_chl::Channel{Message}, 
                          msg_chls::Array{RemoteChannel{Channel{Message}}},
@@ -142,6 +146,12 @@ end
 
 
 # --- jlancers
+"""
+\t(msg::Message, local_chl::Channel{Message}, msg_chls::Array{RemoteChannel{Channel{Message}}})
+
+Attempt to send a piece of work from this worker to another. If there is no
+work available, then a message indicating no work will be sent.
+"""
 function _jlancer(msg::Message,
                   local_chl::Channel{Message},
                   msg_chls::Array{RemoteChannel{Channel{Message}}})
@@ -164,12 +174,14 @@ end
 """
 Pull work from local_chl to compute, and send status
 updates to msg_chl.
+
 This worker receives two message kinds (<| local_chl):
-    :work
-    :end - This worker will exit upon receiving this message
+    - :work
+    - :end - This worker will exit upon receiving this message
+
 This worker also produces two message kinds (|> msg_chl)
-    :_idle - Signal that this worker is idle (local_chl empty)
-    :_nonidle - Signal that this worker is nonidle
+    - :_idle - Signal that this worker is idle (local_chl empty)
+    - :_nonidle - Signal that this worker is nonidle
 """
 function _worker(local_chl::Channel{Message},
                  msg_chl::RemoteChannel{Channel{Message}},
