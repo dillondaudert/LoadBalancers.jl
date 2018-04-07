@@ -3,7 +3,7 @@
 module SubTasks
 include("work.jl")
 
-export WorkUnit, Message, _worker, _msg_handler, _jlancer
+export WorkUnit, Message, _worker, _msg_handler, _jlancer, _msg_handler_rp
 
 struct Message
     kind::Symbol
@@ -65,6 +65,8 @@ function _msg_handler(local_chl::Channel{Message},
 
     @assert msg_chl.where == myid()
 
+    @printf("_msg_handler started\n")
+
     while true
         msg = take!(msg_chl)
 
@@ -92,6 +94,78 @@ function _msg_handler(local_chl::Channel{Message},
         end
     end
 end
+
+function _msg_handler_rp(local_chl::Channel{Message}, 
+                         msg_chls::Array{RemoteChannel{Channel{Message}}},
+                         stat_chl::RemoteChannel{Channel{Message}})
+    """
+    Receive messages on its remote channel. Depending on the message,
+    different actions will be taken:
+    External Messages: (Could come from anywhere)
+        :work - Pass from the remote channel to local_chl
+        :jlance - Start a new task that will attempt to send work in local_chl
+                  to the remote worker specified by this message
+        :nowork - Another worker failed to send work to this worker; request
+                  work from a random worker.
+        :end  - Pass to local_chl and exit.
+    Internal Messages: (Expect to receive these only from other tasks on this process)
+        :_idle - Send an :idle message to the controller via stat_chl; 
+                 Request work from a random worker.
+        :_nonidle - Send a :nonidle message to the controller via stat_chl
+    """
+
+    w_idx = nprocs() > 1 ? myid() - 1 : myid()
+    msg_chl = msg_chls[w_idx]
+
+
+    # other worker ids
+#    other_wrkr_idxs = filter(x->workers()[x] != myid(), 1:nworkers())
+
+    @assert msg_chl.where == myid()
+
+    while true
+        msg = take!(msg_chl)
+
+        if msg.kind == :end
+            put!(local_chl, msg)
+            break
+
+        elseif msg.kind == :work
+            put!(local_chl, msg)
+
+        elseif msg.kind == :nowork
+            put!(stat_chl, Message(:idle, myid()))
+#            other_wrkr_idx = rand(other_wrkr_idxs)
+            other_wrkr_idx = rand(1:nworkers())
+            @printf("Requesting work from %d.\n", workers()[other_wrkr_idx])
+            other_msg_chl = msg_chls[other_wrkr_idx]
+            put!(other_msg_chl, Message(:jlance, myid()))
+
+        elseif msg.kind == :jlance && msg.data > 0
+            local wrk_msg::Message = msg
+            # attempt to load balance
+            @schedule _jlancer(wrk_msg, local_chl, msg_chls)
+
+        elseif msg.kind == :_idle
+            put!(stat_chl, Message(:idle, myid()))
+            # if there is only 1 worker, there is no one else to get work from
+            #    and, if the only worker is idle, that means we should finish
+            @printf("Worker %d idle.\n", myid())
+            if nworkers() > 1
+                #other_wrkr_idx = rand(other_wrkr_idxs)
+                other_wrkr_idx = rand(1:nworkers())
+                @printf("Requesting work from %d.\n", workers()[other_wrkr_idx])
+                other_msg_chl = msg_chls[other_wrkr_idx]
+                put!(other_msg_chl, Message(:jlance, myid()))
+            end
+
+        elseif msg.kind == :_nonidle
+            # put! on remote chl blocks, so schedule in different task
+            @schedule put!(stat_chl, Message(:nonidle, myid()))
+        end
+    end
+end
+
 
 # --- jlancers
 function _jlancer(msg::Message,
@@ -129,6 +203,8 @@ function _worker(local_chl::Channel{Message},
     """
 
     idle::Bool = true
+
+    @printf("_worker starting.\n")
 
     while true
         # wait for an item to be *appended* (going from i -> i+1, not necessary from 0 -> 1)

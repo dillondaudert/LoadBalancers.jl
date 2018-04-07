@@ -22,7 +22,7 @@
     
     @sync begin
         # MESSAGE HANDLER SUBTASK
-        @async _msg_handler(local_chl, msg_chls, stat_chl)
+        @async _msg_handler_rp(local_chl, msg_chls, stat_chl)
         # SUBTASK 1
         @async _worker(local_chl, my_msg_chl, res_chl)
     end
@@ -35,6 +35,13 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
                         stat_chl::RemoteChannel{Channel{Message}},
                         statuses::Array{Symbol})
     # while there are any started, nonidle nodes
+    if nworkers() > 1
+        @printf("status_manager is waking up idle workers:\n")
+        for w_idx in 2:nworkers()
+            @printf("\t... %d\n", workers()[w_idx])
+            put!(msg_chls[w_idx], Message(:_idle, myid()))
+        end
+    end
     while any((statuses .!= :unstarted) .& (statuses .!= :idle))
         status_msg = take!(stat_chl)
         w_idx = nprocs() > 1 ? status_msg.data - 1 : status_msg.data
@@ -54,6 +61,7 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
 end
 
 @everywhere function send_jobs(msg_chl)
+    @printf("Sending work to worker\n")
     nwork = 15*nworkers()
     cost = 3
     # calls remotecall_fetch on the worker; don't wait
