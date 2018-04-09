@@ -99,8 +99,8 @@ end
     local statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
 
     # start the worker processes
-    for i = 1:nworkers()
-        @spawnat workers()[i] worker(msg_chls, stat_chl, res_chl)
+    for wid in workers()
+        @spawnat wid worker(msg_chls, stat_chl, res_chl)
     end
 
     @async recv_results(res_chl)
