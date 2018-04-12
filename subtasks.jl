@@ -2,6 +2,7 @@
 
 module SubTasks
 include("work.jl")
+include("helper.jl")
 
 export WorkUnit, Message, _worker, _msg_handler, _jlancer, _msg_handler_rp
 
@@ -35,16 +36,13 @@ function _msg_handler(local_chl::Channel{Message},
                       msg_chls::Array{RemoteChannel{Channel{Message}}},
                       stat_chl::RemoteChannel{Channel{Message}})
 
-    w_idx = nprocs() > 1 ? myid() - 1 : myid()
-    msg_chl = msg_chls[w_idx]
-
-    @assert msg_chl.where == myid()
+    msg_chl = get_msg_chl(myid(), msg_chls)
 
     @printf("_msg_handler started\n")
 
     while true
-        msg = take!(msg_chl)
-
+        let msg = take!(msg_chl)
+        # begin let scope
         if msg.kind == :end
             put!(local_chl, msg)
             break
@@ -56,9 +54,8 @@ function _msg_handler(local_chl::Channel{Message},
             put!(stat_chl, Message(:idle, myid()))
 
         elseif msg.kind == :jlance && msg.data > 0
-            local wrk_msg::Message = msg
             # attempt to load balance
-            @schedule _jlancer(wrk_msg, local_chl, msg_chls)
+            @schedule _jlancer(msg, local_chl, msg_chls)
 
         elseif msg.kind == :_idle
             put!(stat_chl, Message(:idle, myid()))
@@ -66,6 +63,8 @@ function _msg_handler(local_chl::Channel{Message},
         elseif msg.kind == :_nonidle
             # put! on remote chl blocks, so schedule in different task
             @schedule put!(stat_chl, Message(:nonidle, myid()))
+        end
+        # end let scope    
         end
     end
 end
@@ -92,18 +91,11 @@ function _msg_handler_rp(local_chl::Channel{Message},
                          msg_chls::Array{RemoteChannel{Channel{Message}}},
                          stat_chl::RemoteChannel{Channel{Message}})
 
-    w_idx = nprocs() > 1 ? myid() - 1 : myid()
-    msg_chl = msg_chls[w_idx]
-
-
-    # other worker ids
-#    other_wrkr_idxs = filter(x->workers()[x] != myid(), 1:nworkers())
-
-    @assert msg_chl.where == myid()
+    msg_chl = get_msg_chl(myid(), msg_chls)
 
     while true
-        msg = take!(msg_chl)
-
+        let msg = take!(msg_chl)
+        # start soft local scope 
         if msg.kind == :end
             put!(local_chl, msg)
             break
@@ -113,16 +105,14 @@ function _msg_handler_rp(local_chl::Channel{Message},
 
         elseif msg.kind == :nowork
             put!(stat_chl, Message(:idle, myid()))
-#            other_wrkr_idx = rand(other_wrkr_idxs)
-            other_wrkr_idx = rand(1:nworkers())
-            @printf("Requesting work from %d.\n", workers()[other_wrkr_idx])
-            other_msg_chl = msg_chls[other_wrkr_idx]
+            other_wid = rand(workers())
+            @printf("Requesting work from %d.\n", other_wid)
+            other_msg_chl = get_msg_chl(other_wid, msg_chls)
             put!(other_msg_chl, Message(:jlance, myid()))
 
         elseif msg.kind == :jlance && msg.data > 0
-            local wrk_msg::Message = msg
             # attempt to load balance
-            @schedule _jlancer(wrk_msg, local_chl, msg_chls)
+            @schedule _jlancer(msg, local_chl, msg_chls)
 
         elseif msg.kind == :_idle
             put!(stat_chl, Message(:idle, myid()))
@@ -130,16 +120,18 @@ function _msg_handler_rp(local_chl::Channel{Message},
             #    and, if the only worker is idle, that means we should finish
             @printf("Worker %d idle.\n", myid())
             if nworkers() > 1
-                #other_wrkr_idx = rand(other_wrkr_idxs)
-                other_wrkr_idx = rand(1:nworkers())
-                @printf("Requesting work from %d.\n", workers()[other_wrkr_idx])
-                other_msg_chl = msg_chls[other_wrkr_idx]
+                other_wid = rand(workers())
+                @printf("Requesting work from %d.\n", other_wid)
+                other_msg_chl = get_msg_chl(other_wid, msg_chls)
                 put!(other_msg_chl, Message(:jlance, myid()))
             end
+            sleep(.5)
 
         elseif msg.kind == :_nonidle
             # put! on remote chl blocks, so schedule in different task
             @schedule put!(stat_chl, Message(:nonidle, myid()))
+        end
+        # end soft local scope
         end
     end
 end
@@ -159,12 +151,12 @@ function _jlancer(msg::Message,
     other_w_idx = nprocs() > 1 ? msg.data - 1 : msg.data
     other_msg_chl = msg_chls[other_w_idx]
     if isready(local_chl)
-        local work = take!(local_chl)
-        @assert work.kind == :work
-        @printf("%d jlancer passing work to worker %d.\n", myid(), msg.data)
+        if fetch(local_chl).kind == :end
+            return
+        end
+        work = take!(local_chl)
         put!(other_msg_chl, work)
     else
-        @printf("%d jlancer has no work to pass to %d.\n", myid(), msg.data)
         put!(other_msg_chl, Message(:nowork, myid()))
     end
 end
@@ -258,7 +250,6 @@ function _worker(local_chl::Channel{Message},
 
         # local_chl is now empty
         if !idle
-            @printf("%d idle\n", myid())
             idle = true
             put!(msg_chl, Message(:_idle, myid()))
         end
