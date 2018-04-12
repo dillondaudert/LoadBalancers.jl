@@ -9,6 +9,13 @@
 # - Worker j then begins working or sends a message to the 
 #     controller that it is idle.
 
+P = 3
+addprocs(P)
+W = 100
+Uᵧ = 3
+Tᵧ = W*Uᵧ
+
+@everywhere include(string(homedir(), "/github/jlance/subtasks.jl"))
 @everywhere using SubTasks
 
 @everywhere function worker(msg_chls::Array{RemoteChannel{Channel{Message}}},
@@ -66,9 +73,9 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
     end
 end
 
-@everywhere function send_jobs(msg_chl)
-    nwork = 15*nworkers()
-    cost = 3
+function send_jobs(msg_chl)
+    nwork = W
+    cost = Uᵧ
     # calls remotecall_fetch on the worker; don't wait
     put!(msg_chl, Message(:work, myid(), WorkUnit(nwork, cost)))
 end
@@ -84,7 +91,6 @@ function recv_results(res_chl)
             w_idx = nprocs() > 1 ? work.data - 1 : work.data
             # add the work this worker did
             total_work_done[w_idx] += work._data2
-            @printf("Receiving results #%d from worker %d.\n", res_count, work.data)
         elseif work.kind == :end
             n_ended += 1
         end
@@ -95,9 +101,8 @@ function recv_results(res_chl)
     end
 end
 
-@printf("Controller starting.\n")
-
-@sync begin
+# measure total time to finish calculation
+Tₚ = @elapsed @sync begin
     local msg_chls = [RemoteChannel(()->Channel{Message}(32*nworkers()), pid) for pid in workers()]
     local stat_chl = RemoteChannel(()->Channel{Message}(32), 1)
     local res_chl = RemoteChannel(()->Channel{Message}(32), 1)
@@ -113,17 +118,18 @@ end
     @sync begin
         statuses[1] = :started
 
-        @spawnat workers()[1] send_jobs(msg_chls[1])
+        @async send_jobs(msg_chls[1])
 
         @async status_manager(msg_chls, stat_chl, statuses)
-
-        #@schedule recv_results(res_chl)
     end
 
-    @printf("Sending :end messages to workers.\n")
     for i = 1:nworkers()
         put!(msg_chls[i], Message(:end, -1))
     end
 end
 
-@printf("Controller terminating.\n")
+Tₒ = P*Tₚ - Tᵧ
+S = Tᵧ/Tₚ
+E = S/P
+
+@printf("Walltime: %4.2g\nOverhead: %4.2g\nSpeedup: %4.2g\nEfficiency: %4.2g\n", Tₚ, Tₒ, S, E)

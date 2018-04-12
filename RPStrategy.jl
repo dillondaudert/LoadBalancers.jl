@@ -9,6 +9,13 @@
 # - Worker j then begins working or sends a message to the 
 #     controller that it is idle.
 
+P = 3
+addprocs(P)
+W = 100
+Uᵧ = 3
+Tᵧ = W*Uᵧ
+
+@everywhere include(string(homedir(), "/github/jlance/subtasks.jl"))
 @everywhere using SubTasks
 
 @everywhere function worker(msg_chls::Array{RemoteChannel{Channel{Message}}},
@@ -60,10 +67,9 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
     end
 end
 
-@everywhere function send_jobs(msg_chl)
-    @printf("Sending work to worker\n")
-    nwork = 15*nworkers()
-    cost = 3
+function send_jobs(msg_chl)
+    nwork = W
+    cost = Uᵧ
     # calls remotecall_fetch on the worker; don't wait
     put!(msg_chl, Message(:work, myid(), WorkUnit(nwork, cost)))
 end
@@ -90,9 +96,7 @@ function recv_results(res_chl)
     end
 end
 
-@printf("Controller starting.\n")
-
-@sync begin
+Tₚ = @elapsed @sync begin
     local msg_chls = [RemoteChannel(()->Channel{Message}(32*nworkers()), pid) for pid in workers()]
     local stat_chl = RemoteChannel(()->Channel{Message}(32), 1)
     local res_chl = RemoteChannel(()->Channel{Message}(32), 1)
@@ -108,7 +112,7 @@ end
     @sync begin
         statuses[1] = :started
 
-        @spawnat workers()[1] send_jobs(msg_chls[1])
+        @async send_jobs(msg_chls[1])
 
         @async status_manager(msg_chls, stat_chl, statuses)
 
@@ -121,4 +125,8 @@ end
     end
 end
 
-@printf("Controller terminating.\n")
+Tₒ = P*Tₚ - Tᵧ
+S = Tᵧ/Tₚ
+E = S/P
+
+@printf("Walltime: %4.2f\nOverhead: %4.2f\nSpeedup: %4.2f\nEfficiency: %4.2f\n", Tₚ, Tₒ, S, E)
