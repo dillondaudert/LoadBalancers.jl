@@ -1,10 +1,11 @@
 # useful generic subtasks that can be reused
 
 module SubTasks
-include("work.jl")
+using WorkUnits
+
 include("helper.jl")
 
-export WorkUnit, Message, _worker, _msg_handler, _jlancer, _msg_handler_rp
+export Message, _worker, _msg_handler, _msg_handler_rp
 
 struct Message
     kind::Symbol
@@ -51,6 +52,7 @@ function _msg_handler(local_chl::Channel{Message},
             put!(local_chl, msg)
 
         elseif msg.kind == :nowork
+            @printf("Worker idle\n")
             put!(stat_chl, Message(:idle, myid()))
 
         elseif msg.kind == :jlance && msg.data > 0
@@ -61,6 +63,7 @@ function _msg_handler(local_chl::Channel{Message},
             put!(stat_chl, Message(:idle, myid()))
 
         elseif msg.kind == :_nonidle
+            @printf("Worker working\n")
             # put! on remote chl blocks, so schedule in different task
             @schedule put!(stat_chl, Message(:nonidle, myid()))
         end
@@ -256,4 +259,4 @@ function _worker(local_chl::Channel{Message},
     end
 end # end _worker function
 
-end # End SubTasks Module
+end # end module

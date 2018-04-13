@@ -1,5 +1,9 @@
 # helper functions for simulating work
 
+module WorkUnits
+
+export WorkUnit, split_work
+
 mutable struct WorkUnit{T<:Int}
     units::T
     unitcost::T
@@ -33,3 +37,5 @@ end
 
 # generate a random percentage from the closed interval (0, 1)
 split_work(work::WorkUnit) = (p = rand(1:999); split_work(work, p/1000))
+
+end # end module
