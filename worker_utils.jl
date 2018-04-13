@@ -1,5 +1,19 @@
 # worker utilities; functions used by all lb strategies
 
+function worker(balancer::T) where {T<:AbstractBalancer}
+    
+    local_chl = Channel{Message}(10)
+    
+    @sync begin
+        # MESSAGE HANDLER SUBTASK
+        @async _msg_handler(balancer, local_chl)
+        # SUBTASK 1
+        @async do_work(balancer, local_chl)
+    end
+    put!(balancer.stat_chl, Message(:done, myid()))
+end
+
+
 """
 Pull work from local_chl to compute, and send status
 updates to msg_chl.

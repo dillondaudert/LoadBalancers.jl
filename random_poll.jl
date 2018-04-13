@@ -42,19 +42,6 @@ end
 
 parallel_lb_rp(cap::Int, work::WorkUnit) = parallel_lb(RPBalancer(cap), work)
 
-function worker(balancer::RPBalancer)
-    
-    local_chl = Channel{Message}(10)
-    
-    @sync begin
-        # MESSAGE HANDLER SUBTASK
-        @async _msg_handler(balancer, local_chl)
-        # SUBTASK 1
-        @async do_work(balancer, local_chl)
-    end
-    put!(balancer.stat_chl, Message(:done, myid()))
-end
-
 function status_manager(balancer::RPBalancer)
     # while there are any started, nonidle nodes
     if nworkers() > 1
