@@ -9,18 +9,15 @@
 # - Worker j then begins working or sends a message to the 
 #     controller that it is idle.
 
-P = 3
-addprocs(P)
-W = 100
-Uᵧ = 3
-Tᵧ = W*Uᵧ
+module SBController
+using WorkUnits
+using SubTasks
 
-@everywhere include(string(homedir(), "/github/jlance/subtasks.jl"))
-@everywhere using SubTasks
+export sb_controller
 
-@everywhere function worker(msg_chls::Array{RemoteChannel{Channel{Message}}},
-                            stat_chl::RemoteChannel{Channel{Message}},
-                            res_chl::RemoteChannel{Channel{Message}})
+function worker(msg_chls::Array{RemoteChannel{Channel{Message}}},
+                stat_chl::RemoteChannel{Channel{Message}},
+                res_chl::RemoteChannel{Channel{Message}})
     
     local_chl = Channel{Message}(10)
     w_idx = nprocs() > 1 ? myid() - 1 : myid()
@@ -42,6 +39,7 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
                         stat_chl::RemoteChannel{Channel{Message}},
                         statuses::Array{Symbol})
     # while there are any started, nonidle nodes
+    @printf("status_manager started\n")
     while any((statuses .!= :unstarted) .& (statuses .!= :idle))
         status_msg = take!(stat_chl)
         w_idx = nprocs() > 1 ? status_msg.data - 1 : status_msg.data
@@ -73,13 +71,6 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
     end
 end
 
-function send_jobs(msg_chl)
-    nwork = W
-    cost = Uᵧ
-    # calls remotecall_fetch on the worker; don't wait
-    put!(msg_chl, Message(:work, myid(), WorkUnit(nwork, cost)))
-end
-
 function recv_results(res_chl)
     n_ended = 0
     res_count = 0
@@ -102,34 +93,33 @@ function recv_results(res_chl)
 end
 
 # measure total time to finish calculation
-Tₚ = @elapsed @sync begin
-    local msg_chls = [RemoteChannel(()->Channel{Message}(32*nworkers()), pid) for pid in workers()]
-    local stat_chl = RemoteChannel(()->Channel{Message}(32), 1)
-    local res_chl = RemoteChannel(()->Channel{Message}(32), 1)
-    local statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
+function sb_controller(work::WorkUnit)
+    msg_chls = [RemoteChannel(()->Channel{Message}(32*nworkers()), pid) for pid in workers()]
+    stat_chl = RemoteChannel(()->Channel{Message}(32), 1)
+    res_chl = RemoteChannel(()->Channel{Message}(32), 1)
+    statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
+    Tₚ = @elapsed @sync begin
 
-    # start the worker processes
-    for i = 1:nworkers()
-        @spawnat workers()[i] worker(msg_chls, stat_chl, res_chl)
+        # start the worker processes
+        for i = 1:nworkers()
+            @spawnat workers()[i] worker(msg_chls, stat_chl, res_chl)
+        end
+
+        @async recv_results(res_chl)
+
+        @sync begin
+            statuses[1] = :started
+
+            @async put!(msg_chls[1], Message(:work, myid(), work))
+
+            @async status_manager(msg_chls, stat_chl, statuses)
+        end
+
+        for i = 1:nworkers()
+            put!(msg_chls[i], Message(:end, -1))
+        end
     end
-
-    @async recv_results(res_chl)
-
-    @sync begin
-        statuses[1] = :started
-
-        @async send_jobs(msg_chls[1])
-
-        @async status_manager(msg_chls, stat_chl, statuses)
-    end
-
-    for i = 1:nworkers()
-        put!(msg_chls[i], Message(:end, -1))
-    end
+    Tₚ
 end
-
-Tₒ = P*Tₚ - Tᵧ
-S = Tᵧ/Tₚ
-E = S/P
-
-@printf("Walltime: %4.2g\nOverhead: %4.2g\nSpeedup: %4.2g\nEfficiency: %4.2g\n", Tₚ, Tₒ, S, E)
+    
+end 

@@ -9,18 +9,15 @@
 # - Worker j then begins working or sends a message to the 
 #     controller that it is idle.
 
-P = 3
-addprocs(P)
-W = 100
-Uᵧ = 3
-Tᵧ = W*Uᵧ
+module RPController
+using SubTasks
+using WorkUnits
 
-@everywhere include(string(homedir(), "/github/jlance/subtasks.jl"))
-@everywhere using SubTasks
+export rp_controller
 
-@everywhere function worker(msg_chls::Array{RemoteChannel{Channel{Message}}},
-                            stat_chl::RemoteChannel{Channel{Message}},
-                            res_chl::RemoteChannel{Channel{Message}})
+function worker(msg_chls::Array{RemoteChannel{Channel{Message}}},
+                stat_chl::RemoteChannel{Channel{Message}},
+                res_chl::RemoteChannel{Channel{Message}})
     
     local_chl = Channel{Message}(10)
     w_idx = nprocs() > 1 ? myid() - 1 : myid()
@@ -34,8 +31,6 @@ Tᵧ = W*Uᵧ
         @async _worker(local_chl, my_msg_chl, res_chl)
     end
     put!(stat_chl, Message(:done, myid()))
-
-    #Profile.print(combine=true, mincount=80)
 end
 
 function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
@@ -67,13 +62,6 @@ function status_manager(msg_chls::Array{RemoteChannel{Channel{Message}}},
     end
 end
 
-function send_jobs(msg_chl)
-    nwork = W
-    cost = Uᵧ
-    # calls remotecall_fetch on the worker; don't wait
-    put!(msg_chl, Message(:work, myid(), WorkUnit(nwork, cost)))
-end
-
 function recv_results(res_chl)
     n_ended = 0
     res_count = 0
@@ -96,37 +84,36 @@ function recv_results(res_chl)
     end
 end
 
-Tₚ = @elapsed @sync begin
-    local msg_chls = [RemoteChannel(()->Channel{Message}(32*nworkers()), pid) for pid in workers()]
-    local stat_chl = RemoteChannel(()->Channel{Message}(32), 1)
-    local res_chl = RemoteChannel(()->Channel{Message}(32), 1)
-    local statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
+function rp_controller(work::WorkUnit)
+    # TODO: Separate behavior for single process
+    msg_chls = [RemoteChannel(()->Channel{Message}(32*nworkers()), pid) for pid in workers()]
+    stat_chl = RemoteChannel(()->Channel{Message}(32), 1)
+    res_chl = RemoteChannel(()->Channel{Message}(32), 1)
+    statuses = fill!(Array{Symbol}(nworkers()), :unstarted)
+    Tₚ = @elapsed @sync begin
+        # start the worker processes
+        for wid in workers()
+            @spawnat wid worker(msg_chls, stat_chl, res_chl)
+        end
 
-    # start the worker processes
-    for wid in workers()
-        @spawnat wid worker(msg_chls, stat_chl, res_chl)
+        @async recv_results(res_chl)
+
+        @sync begin
+            statuses[1] = :started
+
+            # send initial work
+            @async put!(msg_chls[1], Message(:work, myid(), work))
+
+            @async status_manager(msg_chls, stat_chl, statuses)
+            
+        end
+
+        @printf("Sending :end messages to workers.\n")
+        for i = 1:nworkers()
+            put!(msg_chls[i], Message(:end, -1))
+        end
     end
-
-    @async recv_results(res_chl)
-
-    @sync begin
-        statuses[1] = :started
-
-        @async send_jobs(msg_chls[1])
-
-        @async status_manager(msg_chls, stat_chl, statuses)
-
-        #@schedule recv_results(res_chl)
-    end
-
-    @printf("Sending :end messages to workers.\n")
-    for i = 1:nworkers()
-        put!(msg_chls[i], Message(:end, -1))
-    end
+    Tₚ
 end
 
-Tₒ = P*Tₚ - Tᵧ
-S = Tᵧ/Tₚ
-E = S/P
-
-@printf("Walltime: %4.2f\nOverhead: %4.2f\nSpeedup: %4.2f\nEfficiency: %4.2f\n", Tₚ, Tₒ, S, E)
+end # end RPController module
