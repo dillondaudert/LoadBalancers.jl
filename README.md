@@ -1,5 +1,4 @@
-# jlance
-Dynamic load balancing in Julia.
+# LoadBalancers.jl
+Module containing dynamic load balancing strategies in Julia.
 
-## How to Use
-```julia [-p <n_processes>] -L subtasks.jl SBStrategy.jl``` 
+```julia driver.jl``` 

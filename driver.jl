@@ -3,7 +3,8 @@
 P = 3
 addprocs(P)
 
-@everywhere include(string(homedir(), "/github/jlance/LoadBalancers.jl"))
+# import just because this is not an installed package yet
+@everywhere include(string(homedir(), "/github/LoadBalancers.jl/src/LoadBalancers.jl"))
 @everywhere using LoadBalancers
 
 W = 20
