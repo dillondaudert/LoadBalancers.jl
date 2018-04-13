@@ -3,8 +3,8 @@
 P = 3
 addprocs(P)
 
-@everywhere include(string(homedir(), "/github/jlance/LoadBalance.jl"))
-@everywhere using LoadBalance
+@everywhere include(string(homedir(), "/github/jlance/LoadBalancers.jl"))
+@everywhere using LoadBalancers
 
 W = 20
 Uᵧ = 3

@@ -1,6 +1,6 @@
 # worker utilities; functions used by all lb strategies
 
-function worker(balancer::T) where {T<:AbstractBalancer}
+function worker(balancer::T) where {T<:AbstractLoadBalancer}
     
     local_chl = Channel{Message}(10)
     
@@ -27,7 +27,7 @@ This worker also produces two message kinds (|> msg_chl)
     - :_nonidle - Signal that this worker is nonidle
 """
 function do_work(balancer::T,
-                 local_chl::Channel{Message}) where {T<:AbstractBalancer}
+                 local_chl::Channel{Message}) where {T<:AbstractLoadBalancer}
 
     idle::Bool = true
     my_msg_chl = get_msg_chl(myid(), balancer.msg_chls)
@@ -114,7 +114,7 @@ work available, then a message indicating no work will be sent.
 """
 function _jlancer(balancer::T,
                   local_chl::Channel{Message},
-                  msg::Message) where {T<:AbstractBalancer}
+                  msg::Message) where {T<:AbstractLoadBalancer}
     # attempt to move some local work to the remote worker
     other_wid = msg.data
     other_msg_chl = balancer.msg_chls[w_idx(other_wid)]

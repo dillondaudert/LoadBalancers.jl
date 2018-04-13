@@ -1,6 +1,6 @@
 # LoadBalance top module
 
-module LoadBalance
+module LoadBalancers
 
 export parallel_lb, WorkUnit
 

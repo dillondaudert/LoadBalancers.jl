@@ -1,4 +1,4 @@
-abstract type AbstractBalancer end
+abstract type AbstractLoadBalancer end
 
 # ------ worker helper functions
 """
@@ -68,7 +68,7 @@ Message(kind, data) = Message(kind, data, -1)
 
 # ----- receive results utility
 
-function recv_results(balancer::T) where {T<:AbstractBalancer}
+function recv_results(balancer::T) where {T<:AbstractLoadBalancer}
     n_ended = 0
     res_count = 0
     total_work_done = zeros(Int64, nworkers())

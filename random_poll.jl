@@ -1,18 +1,18 @@
-export RPBalancer, parallel_lb_rp
+export RPLoadBalancer, parallel_lb_rp
 
-immutable RPBalancer <: AbstractBalancer
+immutable RPLoadBalancer <: AbstractLoadBalancer
     msg_chls    # message channels
     stat_chl    # status channel
     res_chl     # results channel
     statuses    # current worker statuses
 end
-RPBalancer(cap::Int) = RPBalancer(create_msg_chls(cap),
-                                  RemoteChannel(()->Channel{Message}(cap), 1),
-                                  RemoteChannel(()->Channel{Message}(cap), 1),
-                                  fill!(Array{Symbol}(nworkers()), :unstarted))
+RPLoadBalancer(cap::Int) = RPLoadBalancer(create_msg_chls(cap),
+                                          RemoteChannel(()->Channel{Message}(cap), 1),
+                                          RemoteChannel(()->Channel{Message}(cap), 1),
+                                          fill!(Array{Symbol}(nworkers()), :unstarted))
 
 
-function parallel_lb(balancer::RPBalancer, work::WorkUnit)
+function parallel_lb(balancer::RPLoadBalancer, work::WorkUnit)
     # TODO: Separate behavior for single process
 
     Tₚ = @elapsed @sync begin
@@ -40,9 +40,9 @@ function parallel_lb(balancer::RPBalancer, work::WorkUnit)
     Tₚ
 end
 
-parallel_lb_rp(cap::Int, work::WorkUnit) = parallel_lb(RPBalancer(cap), work)
+parallel_lb_rp(cap::Int, work::WorkUnit) = parallel_lb(RPLoadBalancer(cap), work)
 
-function status_manager(balancer::RPBalancer)
+function status_manager(balancer::RPLoadBalancer)
     # while there are any started, nonidle nodes
     if nworkers() > 1
         @printf("status_manager is waking up idle workers:\n")
@@ -89,7 +89,7 @@ Internal Messages: (Expect to receive these only from other tasks on this proces
              Request work from a random worker.
 - :_nonidle - Send a :nonidle message to the controller via stat_chl
 """
-function _msg_handler(balancer::RPBalancer,
+function _msg_handler(balancer::RPLoadBalancer,
                       local_chl::Channel{Message})
 
     msg_chl = get_msg_chl(myid(), balancer.msg_chls)

@@ -1,17 +1,17 @@
-export SBBalancer, parallel_lb_sb
+export SBLoadBalancer, parallel_lb_sb
 
-immutable SBBalancer <: AbstractBalancer
+immutable SBLoadBalancer <: AbstractLoadBalancer
     msg_chls
     stat_chl
     res_chl
     statuses
 end
-SBBalancer(cap::Int) = SBBalancer(create_msg_chls(cap),
-                                  RemoteChannel(()->Channel{Message}(cap), 1),
-                                  RemoteChannel(()->Channel{Message}(cap), 1),
-                                  fill!(Array{Symbol}(nworkers()), :unstarted))
+SBLoadBalancer(cap::Int) = SBLoadBalancer(create_msg_chls(cap),
+                                          RemoteChannel(()->Channel{Message}(cap), 1),
+                                          RemoteChannel(()->Channel{Message}(cap), 1),
+                                          fill!(Array{Symbol}(nworkers()), :unstarted))
 
-function parallel_lb(balancer::SBBalancer, work::WorkUnit)
+function parallel_lb(balancer::SBLoadBalancer, work::WorkUnit)
 
     Tₚ = @elapsed @sync begin
 
@@ -37,9 +37,9 @@ function parallel_lb(balancer::SBBalancer, work::WorkUnit)
     Tₚ
 end
 
-parallel_lb_sb(cap::Int, work::WorkUnit) = parallel_lb(SBBalancer(cap), work)
+parallel_lb_sb(cap::Int, work::WorkUnit) = parallel_lb(SBLoadBalancer(cap), work)
 
-function status_manager(balancer::SBBalancer)
+function status_manager(balancer::SBLoadBalancer)
     # while there are any started, nonidle nodes
     @printf("status_manager started\n")
     while any((balancer.statuses .!= :unstarted) .& (balancer.statuses .!= :idle))
@@ -90,7 +90,7 @@ Internal Messages: (Expect to receive these only from other tasks on this proces
 - :_idle - Send an :idle message to the controller via stat_chl 
 - :_nonidle - Send a :nonidle message to the controller via stat_chl
 """
-function _msg_handler(balancer::SBBalancer,
+function _msg_handler(balancer::SBLoadBalancer,
                       local_chl::Channel{Message})
 
     msg_chl = get_msg_chl(myid(), balancer.msg_chls)
