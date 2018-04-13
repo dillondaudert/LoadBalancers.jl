@@ -1,6 +1,6 @@
 # useful generic subtasks that can be reused
 
-module SubTasks
+module Workers
 using WorkUnits
 
 include("helper.jl")
