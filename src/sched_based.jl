@@ -41,7 +41,7 @@ parallel_lb_sb(cap::Int, work::WorkUnit) = parallel_lb(SBLoadBalancer(cap), work
 
 function status_manager(balancer::SBLoadBalancer)
     # while there are any started, nonidle nodes
-    @printf("status_manager started\n")
+    info("status_manager started")
     while any((balancer.statuses .!= :unstarted) .& (balancer.statuses .!= :idle))
         status_msg = take!(balancer.stat_chl)
         #w_idx = nprocs() > 1 ? status_msg.data - 1 : status_msg.data
@@ -95,8 +95,6 @@ function _msg_handler(balancer::SBLoadBalancer,
 
     msg_chl = get_msg_chl(myid(), balancer.msg_chls)
 
-    @printf("_msg_handler started\n")
-
     while true
         let msg = take!(msg_chl)
         # begin let scope
@@ -108,7 +106,7 @@ function _msg_handler(balancer::SBLoadBalancer,
             put!(local_chl, msg)
 
         elseif msg.kind == :nowork
-            @printf("Worker idle\n")
+            info("worker ", myid(), " idle")
             put!(balancer.stat_chl, Message(:idle, myid()))
 
         elseif msg.kind == :jlance && msg.data > 0
@@ -121,7 +119,7 @@ function _msg_handler(balancer::SBLoadBalancer,
             put!(balancer.stat_chl, Message(:idle, myid()))
 
         elseif msg.kind == :_nonidle
-            @printf("Worker working\n")
+            info("worker ", myid(), " working")
             # put! on remote chl blocks, so schedule in different task
             @schedule put!(balancer.stat_chl, Message(:nonidle, myid()))
         end

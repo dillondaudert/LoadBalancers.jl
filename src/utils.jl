@@ -79,13 +79,13 @@ function recv_results(balancer::T) where {T<:AbstractLoadBalancer}
             w_idx = nprocs() > 1 ? work.data - 1 : work.data
             # add the work this worker did
             total_work_done[w_idx] += work._data2
-            @printf("Receiving results #%d from worker %d.\n", res_count, work.data)
+            info("Receiving results #", string(res_count), " from worker ", string(work.data))
         elseif work.kind == :end
             n_ended += 1
         end
     end
 
     for w_idx in 1:nworkers()
-        @printf("Worker %d did %ds of work.\n", workers()[w_idx], total_work_done[w_idx])
+        info("Worker ", string(workers()[w_idx]), " did ", string(total_work_done[w_idx]), "s of work.")
     end
 end

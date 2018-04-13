@@ -45,9 +45,9 @@ parallel_lb_rp(cap::Int, work::WorkUnit) = parallel_lb(RPLoadBalancer(cap), work
 function status_manager(balancer::RPLoadBalancer)
     # while there are any started, nonidle nodes
     if nworkers() > 1
-        @printf("status_manager is waking up idle workers:\n")
+        info("status_manager is waking up idle workers...")
         for w_idx in 2:nworkers()
-            @printf("\t... %d\n", workers()[w_idx])
+            info("\t... ", workers()[w_idx])
             put!(balancer.msg_chls[w_idx], Message(:_idle, myid()))
         end
     end
@@ -107,7 +107,6 @@ function _msg_handler(balancer::RPLoadBalancer,
         elseif msg.kind == :nowork
             put!(balancer.stat_chl, Message(:idle, myid()))
             other_wid = rand(workers())
-            @printf("Requesting work from %d.\n", other_wid)
             other_msg_chl = get_msg_chl(other_wid, balancer.msg_chls)
             put!(other_msg_chl, Message(:jlance, myid()))
 
@@ -119,10 +118,9 @@ function _msg_handler(balancer::RPLoadBalancer,
             put!(balancer.stat_chl, Message(:idle, myid()))
             # if there is only 1 worker, there is no one else to get work from
             #    and, if the only worker is idle, that means we should finish
-            @printf("Worker %d idle.\n", myid())
+            info("worker ", myid(), " idle")
             if nworkers() > 1
                 other_wid = rand(workers())
-                @printf("Requesting work from %d.\n", other_wid)
                 other_msg_chl = get_msg_chl(other_wid, balancer.msg_chls)
                 put!(other_msg_chl, Message(:jlance, myid()))
             end

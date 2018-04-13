@@ -32,7 +32,7 @@ function do_work(balancer::T,
     idle::Bool = true
     my_msg_chl = get_msg_chl(myid(), balancer.msg_chls)
 
-    @printf("_worker starting.\n")
+    info("worker ", string(myid()), " do_work")
 
     while true
         # wait for an item to be *appended* (going from i -> i+1, not necessary from 0 -> 1)
@@ -58,7 +58,7 @@ function do_work(balancer::T,
             elseif msg.kind == :work
                 # if this worker has been idle, signal it is no longer idle
                 if idle
-                    @printf("%d working\n", myid())
+                    info("worker ", string(myid()), " working")
                     idle = false
                     last_signal = time()
                     put!(my_msg_chl, Message(:_nonidle, myid()))
@@ -94,8 +94,8 @@ function do_work(balancer::T,
 
                 put!(balancer.res_chl, Message(:work, myid(), work_1.unitcost))
             else
-                @printf("_worker received unrecognized message! %s\n", string(msg))
-                exit()
+                err("_worker received unrecognized message! ", string(msg))
+                error("do_work error")
             end
         end
 
