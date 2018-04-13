@@ -4,7 +4,9 @@ module LoadBalance
 
 export parallel_lb, WorkUnit
 
-include("utilities.jl")
+include("utils.jl")
+include("worker_utils.jl")
 include("random_poll.jl")
+#include("sched_based.jl")
 
 end
