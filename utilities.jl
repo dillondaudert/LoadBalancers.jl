@@ -1,9 +1,28 @@
-# helper functions for simulating work
+abstract type AbstractBalancer end
 
-module WorkUnits
+# ------ worker helper functions
+"""
+Return the index of a worker in the workers() array, given its process id.
+"""
+w_idx(wid) = nprocs() > 1 ? wid - 1 : wid
 
-export WorkUnit, split_work
+"""
+Return a reference to the message channel located on a particular worker.
+"""
+get_msg_chl(wid, msg_chls) = msg_chls[w_idx(wid)]
 
+"""
+Args: cap - Integer indicating the capacity of the channels.
+
+Create nworkers() remote channels for message passing.
+"""
+function create_msg_chls(cap::Int)
+    msg_chls = [RemoteChannel(()->Channel(cap), pid) for pid in workers()]
+    msg_chls
+end
+
+
+# ------ helper functions for simulating work
 mutable struct WorkUnit{T<:Int}
     units::T
     unitcost::T
@@ -38,4 +57,11 @@ end
 # generate a random percentage from the closed interval (0, 1)
 split_work(work::WorkUnit) = (p = rand(1:999); split_work(work, p/1000))
 
-end # end module
+# ------ Message type for passing messages between processes and tasks
+struct Message
+    kind::Symbol
+    data::Int64
+    _data2 # TODO: rename data and _data2 to more sensible names
+end
+
+Message(kind, data) = Message(kind, data, -1)
