@@ -65,3 +65,28 @@ struct Message
 end
 
 Message(kind, data) = Message(kind, data, -1)
+
+# ----- receive results utility
+
+function recv_results(balancer::T) where {T<:AbstractBalancer}
+    n_ended = 0
+    res_count = 0
+    total_work_done = zeros(Int64, nworkers())
+    while n_ended < nworkers()
+        work = take!(balancer.res_chl)
+        if work.kind == :work
+            res_count += 1
+            w_idx = nprocs() > 1 ? work.data - 1 : work.data
+            # add the work this worker did
+            total_work_done[w_idx] += work._data2
+            @printf("Receiving results #%d from worker %d.\n", res_count, work.data)
+        elseif work.kind == :end
+            n_ended += 1
+        end
+    end
+
+    for w_idx in 1:nworkers()
+        @printf("Worker %d did %ds of work.\n", workers()[w_idx], total_work_done[w_idx])
+    end
+end
+

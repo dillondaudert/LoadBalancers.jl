@@ -84,28 +84,6 @@ function status_manager(balancer::RPBalancer)
     end
 end
 
-function recv_results(balancer::RPBalancer)
-    n_ended = 0
-    res_count = 0
-    total_work_done = zeros(Int64, nworkers())
-    while n_ended < nworkers()
-        work = take!(balancer.res_chl)
-        if work.kind == :work
-            res_count += 1
-            w_idx = nprocs() > 1 ? work.data - 1 : work.data
-            # add the work this worker did
-            total_work_done[w_idx] += work._data2
-            @printf("Receiving results #%d from worker %d.\n", res_count, work.data)
-        elseif work.kind == :end
-            n_ended += 1
-        end
-    end
-
-    for w_idx in 1:nworkers()
-        @printf("Worker %d did %ds of work.\n", workers()[w_idx], total_work_done[w_idx])
-    end
-end
-
 
 """
 Receive messages on its remote channel. Depending on the message,
