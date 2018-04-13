@@ -149,31 +149,6 @@ function _msg_handler(balancer::RPBalancer,
     end
 end
 
-
-# --- jlancers
-"""
-
-Attempt to send a piece of work from this worker to another. If there is no
-work available, then a message indicating no work will be sent.
-"""
-function _jlancer(balancer::RPBalancer,
-                  local_chl::Channel{Message},
-                  msg::Message)
-    # attempt to move some local work to the remote worker
-    other_wid = msg.data
-    other_msg_chl = balancer.msg_chls[w_idx(other_wid)]
-    if isready(local_chl)
-        if fetch(local_chl).kind == :end
-            return
-        end
-        work = take!(local_chl)
-        put!(other_msg_chl, work)
-    else
-        put!(other_msg_chl, Message(:nowork, myid()))
-    end
-end
-
-
 # --- workers
 """
 Pull work from local_chl to compute, and send status
