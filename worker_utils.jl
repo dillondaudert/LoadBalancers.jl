@@ -106,3 +106,26 @@ function do_work(balancer::T,
         end
     end
 end # end _worker function
+
+"""
+
+Attempt to send a piece of work from this worker to another. If there is no
+work available, then a message indicating no work will be sent.
+"""
+function _jlancer(balancer::T,
+                  local_chl::Channel{Message},
+                  msg::Message) where {T<:AbstractBalancer}
+    # attempt to move some local work to the remote worker
+    other_wid = msg.data
+    other_msg_chl = balancer.msg_chls[w_idx(other_wid)]
+    if isready(local_chl)
+        if fetch(local_chl).kind == :end
+            return
+        end
+        work = take!(local_chl)
+        put!(other_msg_chl, work)
+    else
+        put!(other_msg_chl, Message(:nowork, myid()))
+    end
+end
+
