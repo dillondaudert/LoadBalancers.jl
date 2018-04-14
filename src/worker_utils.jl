@@ -6,7 +6,7 @@ Start a worker that receives work messages and performs computation asynchronous
 """
 function worker(balancer::T) where {T<:AbstractLoadBalancer}
     
-    local_chl = Channel{Message}(10)
+    local_chl = Channel{Message}(64)
     
     @sync begin
         # MESSAGE HANDLER SUBTASK
@@ -35,7 +35,7 @@ function do_work(balancer::T,
                  local_chl::Channel{Message}) where {T<:AbstractLoadBalancer}
 
     idle::Bool = true
-    my_msg_chl = get_msg_chl(myid(), balancer.msg_chls)
+    my_msg_chl = get_msg_chl(balancer)
 
     info("worker ", string(myid()), " do_work")
 

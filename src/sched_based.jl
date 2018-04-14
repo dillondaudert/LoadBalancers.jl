@@ -93,7 +93,7 @@ Internal Messages: (Expect to receive these only from other tasks on this proces
 function _msg_handler(balancer::SBLoadBalancer,
                       local_chl::Channel{Message})
 
-    msg_chl = get_msg_chl(myid(), balancer.msg_chls)
+    msg_chl = get_msg_chl(balancer)
 
     while true
         let msg = take!(msg_chl)

@@ -92,7 +92,7 @@ Internal Messages: (Expect to receive these only from other tasks on this proces
 function _msg_handler(balancer::RPLoadBalancer,
                       local_chl::Channel{Message})
 
-    msg_chl = get_msg_chl(myid(), balancer.msg_chls)
+    msg_chl = get_msg_chl(balancer)
 
     while true
         let msg = take!(msg_chl)
@@ -107,7 +107,7 @@ function _msg_handler(balancer::RPLoadBalancer,
         elseif msg.kind == :nowork
             put!(balancer.stat_chl, Message(:idle, myid()))
             other_wid = rand(workers())
-            other_msg_chl = get_msg_chl(other_wid, balancer.msg_chls)
+            other_msg_chl = get_msg_chl(balancer, other_wid)
             put!(other_msg_chl, Message(:jlance, myid()))
 
         elseif msg.kind == :jlance && msg.data > 0
@@ -121,7 +121,7 @@ function _msg_handler(balancer::RPLoadBalancer,
             info("worker ", myid(), " idle")
             if nworkers() > 1
                 other_wid = rand(workers())
-                other_msg_chl = get_msg_chl(other_wid, balancer.msg_chls)
+                other_msg_chl = get_msg_chl(balancer, other_wid)
                 put!(other_msg_chl, Message(:jlance, myid()))
             end
 
