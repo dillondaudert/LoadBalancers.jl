@@ -111,9 +111,7 @@ function _msg_handler(balancer::SBLoadBalancer,
 
         elseif msg.kind == :jlance && msg.data > 0
             # attempt to load balance
-            @schedule _jlancer(balancer, 
-                               local_chl,
-                               msg)
+            @schedule send_work(balancer, local_chl, msg)
 
         elseif msg.kind == :_idle
             put!(balancer.stat_chl, Message(:idle, myid()))
