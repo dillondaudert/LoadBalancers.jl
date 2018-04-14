@@ -1,17 +1,26 @@
 export RPLoadBalancer, parallel_lb_rp
 
+"""
+Load balancing through random polling.
+"""
 immutable RPLoadBalancer <: AbstractLoadBalancer
-    msg_chls    # message channels
-    stat_chl    # status channel
-    res_chl     # results channel
-    statuses    # current worker statuses
+    msg_chls::Array{RemoteChannel{Channel{Message}}}
+    stat_chl::RemoteChannel{Channel{Message}}
+    res_chl::RemoteChannel{Channel{Message}}
+    statuses::Array{Symbol}
 end
-RPLoadBalancer(cap::Int) = RPLoadBalancer(create_msg_chls(cap),
-                                          RemoteChannel(()->Channel{Message}(cap), 1),
-                                          RemoteChannel(()->Channel{Message}(cap), 1),
-                                          fill!(Array{Symbol}(nworkers()), :unstarted))
+RPLoadBalancer(cap::Integer=64) = RPLoadBalancer(create_msg_chls(cap),
+                                                 RemoteChannel(()->Channel{Message}(cap), 1),
+                                                 RemoteChannel(()->Channel{Message}(cap), 1),
+                                                 fill!(Array{Symbol}(nworkers()), :unstarted))
 
 
+"""
+    parallel_lb(balancer::RPLoadBalancer, work::WorkUnit)
+
+Compute the task associated with `work` using random polling load balancing. Return
+the elapsed time.
+"""
 function parallel_lb(balancer::RPLoadBalancer, work::WorkUnit)
     # TODO: Separate behavior for single process
 
@@ -40,8 +49,19 @@ function parallel_lb(balancer::RPLoadBalancer, work::WorkUnit)
     Tₚ
 end
 
-parallel_lb_rp(cap::Int, work::WorkUnit) = parallel_lb(RPLoadBalancer(cap), work)
+"""
+    parallel_lb_rp(work::WorkUnit)
 
+Compute the task associated with `work` using the default RPLoadBalancer
+"""
+parallel_lb_rp(work::WorkUnit) = parallel_lb(RPLoadBalancer(), work)
+
+
+"""
+    status_manager(balancer::RPLoadBalancer)
+
+Track worker status through update messages.
+"""
 function status_manager(balancer::RPLoadBalancer)
     # while there are any started, nonidle nodes
     if nworkers() > 1

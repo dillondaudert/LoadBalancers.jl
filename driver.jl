@@ -13,7 +13,7 @@ Tᵧ = W*Uᵧ
     
 @printf("RP Strategy\n")
 work = WorkUnit(W, Uᵧ)
-Tₚ = parallel_lb_rp(32, work)
+Tₚ = parallel_lb_rp(work)
 
 Tₒ = P*Tₚ - Tᵧ
 S = Tᵧ/Tₚ
@@ -24,7 +24,7 @@ E = S/P
 
 @printf("SB Strategy\n")
 work = WorkUnit(W, Uᵧ)
-Tₚ = parallel_lb_sb(32, work)
+Tₚ = parallel_lb_sb(work)
 
 Tₒ = P*Tₚ - Tᵧ
 S = Tᵧ/Tₚ

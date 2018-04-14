@@ -1,16 +1,25 @@
 export SBLoadBalancer, parallel_lb_sb
 
+"""
+Scheduler-based load balancing.
+"""
 immutable SBLoadBalancer <: AbstractLoadBalancer
-    msg_chls
-    stat_chl
-    res_chl
-    statuses
+    msg_chls::Array{RemoteChannel{Channel{Message}}}
+    stat_chl::RemoteChannel{Channel{Message}}
+    res_chl::RemoteChannel{Channel{Message}}
+    statuses::Array{Symbol}
 end
-SBLoadBalancer(cap::Int) = SBLoadBalancer(create_msg_chls(cap),
-                                          RemoteChannel(()->Channel{Message}(cap), 1),
-                                          RemoteChannel(()->Channel{Message}(cap), 1),
-                                          fill!(Array{Symbol}(nworkers()), :unstarted))
+SBLoadBalancer(cap::Integer=64) = SBLoadBalancer(create_msg_chls(cap),
+                                                 RemoteChannel(()->Channel{Message}(cap), 1),
+                                                 RemoteChannel(()->Channel{Message}(cap), 1),
+                                                 fill!(Array{Symbol}(nworkers()), :unstarted))
 
+"""
+    parallel_lb(balancer::SBLoadBalancer, work::WorkUnit)
+
+Compute the task associated with `work` using scheduler-based load balancing. Return 
+the elapsed time.
+"""
 function parallel_lb(balancer::SBLoadBalancer, work::WorkUnit)
 
     Tₚ = @elapsed @sync begin
@@ -37,8 +46,18 @@ function parallel_lb(balancer::SBLoadBalancer, work::WorkUnit)
     Tₚ
 end
 
-parallel_lb_sb(cap::Int, work::WorkUnit) = parallel_lb(SBLoadBalancer(cap), work)
+"""
+    parallel_lb_sb(work::WorkUnit)
 
+Compute the task associated with `work` using the default SBLoadBalancer
+"""
+parallel_lb_sb(work::WorkUnit) = parallel_lb(SBLoadBalancer(), work)
+
+"""
+    status_manager(balancer::SBLoadBalancer)
+
+Manage worker status and pair nonidle with idle workers.
+"""
 function status_manager(balancer::SBLoadBalancer)
     # while there are any started, nonidle nodes
     info("status_manager started")

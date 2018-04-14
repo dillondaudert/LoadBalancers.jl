@@ -35,7 +35,7 @@ Create nworkers() remote channels for message passing.
 
 """
 function create_msg_chls(capacity::Integer=64)
-    msg_chls = [RemoteChannel(()->Channel(capacity), pid) for pid in workers()]
+    msg_chls = [RemoteChannel(()->Channel{Message}(capacity), pid) for pid in workers()]
     msg_chls
 end
 
