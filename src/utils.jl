@@ -2,42 +2,77 @@ abstract type AbstractLoadBalancer end
 
 # ------ worker helper functions
 """
+    w_idx(wid::Integer)
+    w_idx()
+
 Return the index of a worker in the workers() array, given its process id.
+
+If no wid is specified, then this returns the index of the calling process.
+Note that this should only be called from the controller if the controller
+is also a worker.
 """
-w_idx(wid) = nprocs() > 1 ? wid - 1 : wid
+w_idx(wid::Integer) = nprocs() > 1 ? wid - 1 : wid
+w_idx() = w_idx(myid())
+
 
 """
-Return a reference to the message channel located on a particular worker.
+    get_msg_chl(balancer<:AbstractLoadBalancer, wid::Integer)
+    get_msg_chl(balancer<:AbstractLoadBalancer)
+
+Return a reference to the message channel associated with worker wid.
 """
-get_msg_chl(wid, msg_chls) = msg_chls[w_idx(wid)]
+get_msg_chl(balancer::T, wid::Integer) where {T<:AbstractLoadBalancer} = balancer.msg_chls[w_idx(wid)]
+get_msg_chl(balancer::T) where {T<:AbstractLoadBalancer} = get_msg_chl(balancer, myid())
+
 
 """
-Args: cap - Integer indicating the capacity of the channels.
+    create_msg_chls(capacity::Integer=64)
 
 Create nworkers() remote channels for message passing.
+
+# Arguments
+- `capacity`: the capacity of the channels
+
 """
-function create_msg_chls(cap::Int)
-    msg_chls = [RemoteChannel(()->Channel(cap), pid) for pid in workers()]
+function create_msg_chls(capacity::Integer=64)
+    msg_chls = [RemoteChannel(()->Channel(capacity), pid) for pid in workers()]
     msg_chls
 end
 
+# -- Simulate work 
 
-# ------ helper functions for simulating work
-mutable struct WorkUnit{T<:Int}
+mutable struct WorkUnit{T<:Integer, S<:Real}
     units::T
-    unitcost::T
-    WorkUnit{T}(u, c) where {T<:Int} = u < 0 || c ≤ 0 ? error("negative units or cost less than 0") : new(u, c)
+    unitcost::S
+    WorkUnit{T, S}(u, c) where {T<:Integer, S<:Real} = u < 0 || c ≤ 0 ? error("negative units or cost less than 0") : new(u, c)
 end
-WorkUnit(u::T, c::T) where {T<:Int} = WorkUnit{T}(u, c)
+WorkUnit(u::T, c::S) where {T<:Integer, S<:Real} = WorkUnit{T, S}(u, c)
 
+
+"""
+    split_work(work::WorkUnit, p<:AbstractFloat)
+    split_work(work::WorkUnit)
+
+Split a work into two WorkUnits, u and v, according to percentage p.
+
+work must have at least 2 units. work will always be split in such a way to guarantee
+that both u and v have at least 1 unit each. If `p` is not given, then a random value
+0 < p < 1 will be used.
+
+# Arguments
+- `work`: An object of type WorkUnit to be split
+- `p`: The percentage of units to give to the first split, u.
+
+# Examples
+
+```jldoctest
+julia> w = WorkUnit(10, 3.)
+WorkUnit{Int64,Float64}(10, 3.0)
+julia> u, v = split_work(w, .6)
+(WorkUnit{Int64,Float64}(6, 3.0), WorkUnit{Int64,Float64}(4, 3.0))
+```
+"""
 function split_work(work::WorkUnit, p::T where T<:AbstractFloat)
-    """
-    Split a work into two WorkUnits, u and v, according to percentage p.
-    WorkUnit u will have p*units units of work, and WorkUnit v will have
-    v*(1-p) units of work.
-    Note that 0 < p < 1, as each resulting struct must have at least 1
-    unit of work.
-    """
 
     # check that valid percentage
     !(0 < p < 1) && (@printf("p must be: 0 < p < 1, got %g\n", p); throw(DomainError()))
@@ -53,9 +88,8 @@ function split_work(work::WorkUnit, p::T where T<:AbstractFloat)
     return WorkUnit(u_units, work.unitcost), WorkUnit(v_units, work.unitcost)
 
 end
-
-# generate a random percentage from the closed interval (0, 1)
 split_work(work::WorkUnit) = (p = rand(1:999); split_work(work, p/1000))
+
 
 # ------ Message type for passing messages between processes and tasks
 struct Message
@@ -66,8 +100,12 @@ end
 
 Message(kind, data) = Message(kind, data, -1)
 
-# ----- receive results utility
 
+"""
+    recv_results(balancer<:AbstractLoadBalancer)
+
+Receive and handle the results from workers passed to res_chl.
+"""
 function recv_results(balancer::T) where {T<:AbstractLoadBalancer}
     n_ended = 0
     res_count = 0
