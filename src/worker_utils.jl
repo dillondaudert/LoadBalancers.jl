@@ -1,5 +1,9 @@
-# worker utilities; functions used by all lb strategies
 
+"""
+    worker(balancer<:AbstractLoadBalancer)
+
+Start a worker that receives work messages and performs computation asynchronously.
+"""
 function worker(balancer::T) where {T<:AbstractLoadBalancer}
     
     local_chl = Channel{Message}(10)
@@ -15,16 +19,17 @@ end
 
 
 """
-Pull work from local_chl to compute, and send status
-updates to msg_chl.
+    do_work(balancer<:AbstractLoadBalancer, local_chl::Channel{Message})
 
-This worker receives two message kinds (<| local_chl):
-    - :work
-    - :end - This worker will exit upon receiving this message
+Pull work from local_chl to compute, and send status updates to msg_chl.
 
-This worker also produces two message kinds (|> msg_chl)
-    - :_idle - Signal that this worker is idle (local_chl empty)
-    - :_nonidle - Signal that this worker is nonidle
+This worker receives two message kinds (<| `local_chl`):
+- `:work`
+- `:end` - This worker will exit upon receiving this message
+
+This worker also produces two message kinds (|> `balancer.msg_chl`)
+- `:_idle` - Signal that this worker is idle (`local_chl` empty)
+- `:_nonidle` - Signal that this worker is nonidle
 """
 function do_work(balancer::T,
                  local_chl::Channel{Message}) where {T<:AbstractLoadBalancer}
@@ -62,7 +67,7 @@ function do_work(balancer::T,
                     idle = false
                     last_signal = time()
                     put!(my_msg_chl, Message(:_nonidle, myid()))
-                # if it has been 1 second since the last nonsignal message
+                # if it has been 1 second since the last nonidle message
                 
                 elseif time() - last_signal > 1
                     put!(my_msg_chl, Message(:_nonidle, myid()))
@@ -108,16 +113,16 @@ function do_work(balancer::T,
 end # end _worker function
 
 """
+    send_work(balancer<:AbstractLoadBalancer, local_chl::Channel{Message}, msg::Message)
 
-Attempt to send a piece of work from this worker to another. If there is no
-work available, then a message indicating no work will be sent.
+Attempt to send a piece of work from this worker to another. 
 """
-function _jlancer(balancer::T,
-                  local_chl::Channel{Message},
-                  msg::Message) where {T<:AbstractLoadBalancer}
+function send_work(balancer::T,
+                   local_chl::Channel{Message},
+                   msg::Message) where {T<:AbstractLoadBalancer}
     # attempt to move some local work to the remote worker
     other_wid = msg.data
-    other_msg_chl = balancer.msg_chls[w_idx(other_wid)]
+    other_msg_chl = get_msg_chl(balancer, other_wid)
     if isready(local_chl)
         if fetch(local_chl).kind == :end
             return
