@@ -8,5 +8,6 @@ include("utils.jl")
 include("worker_utils.jl")
 include("random_poll.jl")
 include("sched_based.jl")
+include("async_rrobin.jl")
 
 end

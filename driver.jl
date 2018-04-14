@@ -11,6 +11,16 @@ W = 20
 Uᵧ = 3
 Tᵧ = W*Uᵧ
     
+@printf("ARR Strategy\n")
+work = WorkUnit(W, Uᵧ)
+Tₚ = parallel_lb_arr(work)
+
+Tₒ = P*Tₚ - Tᵧ
+S = Tᵧ/Tₚ
+E = S/P
+
+@printf("Walltime: %4.2f\nOverhead: %4.2f\nSpeedup: %4.2f\nEfficiency: %4.2f\n", Tₚ, Tₒ, S, E)
+
 @printf("RP Strategy\n")
 work = WorkUnit(W, Uᵧ)
 Tₚ = parallel_lb_rp(work)
