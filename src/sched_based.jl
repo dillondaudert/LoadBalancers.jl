@@ -17,12 +17,11 @@ SBLoadBalancer(cap::Integer=64) = SBLoadBalancer(create_msg_chls(cap),
 """
     parallel_lb(balancer::SBLoadBalancer, work::WorkUnit)
 
-Compute the task associated with `work` using scheduler-based load balancing. Return 
-the elapsed time.
+Compute the task associated with `work` using scheduler-based load balancing.
 """
 function parallel_lb(balancer::SBLoadBalancer, work::WorkUnit)
 
-    Tₚ = @elapsed @sync begin
+    @sync begin
 
         # start the worker processes
         for i = 1:nworkers()
@@ -43,7 +42,6 @@ function parallel_lb(balancer::SBLoadBalancer, work::WorkUnit)
             put!(balancer.msg_chls[i], Message(:end, -1))
         end
     end
-    Tₚ
 end
 
 """

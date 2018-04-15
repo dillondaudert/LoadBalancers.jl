@@ -18,13 +18,10 @@ RPLoadBalancer(cap::Integer=64) = RPLoadBalancer(create_msg_chls(cap),
 """
     parallel_lb(balancer::RPLoadBalancer, work::WorkUnit)
 
-Compute the task associated with `work` using random polling load balancing. Return
-the elapsed time.
+Compute the task associated with `work` using random polling load balancing.
 """
 function parallel_lb(balancer::RPLoadBalancer, work::WorkUnit)
-    # TODO: Separate behavior for single process
-
-    Tₚ = @elapsed @sync begin
+    @sync begin
         # start the worker processes
         for wid in workers()
             @spawnat wid worker(balancer)
@@ -46,7 +43,6 @@ function parallel_lb(balancer::RPLoadBalancer, work::WorkUnit)
             put!(balancer.msg_chls[i], Message(:end, -1))
         end
     end
-    Tₚ
 end
 
 """
